@@ -3,11 +3,14 @@ using System.Net;
 namespace CompareVPN.Tools.IspChecker;
 
 /// <summary>
-/// Resolves an IP address to the network that announces it.
-/// Implement this to plug in another dataset (IPinfo Lite, MaxMind GeoLite2, ...).
+/// Finds which network owns an address. Self-hosters can implement this to plug in another list of networks
+/// (for example IPinfo Lite or MaxMind GeoLite2) instead of the iptoasn.com file.
 /// </summary>
 public interface IAsnDataSource
 {
-    /// <summary>Returns the announcing network and its block, or null if the address is unrouted or unknown.</summary>
-    ValueTask<AsnLookup?> FindAsync(IPAddress address, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Looks <paramref name="address"/> up. Returns the matching network, "not in the list", or "data not available"
+    /// when nothing is loaded yet.
+    /// </summary>
+    ValueTask<AsnSearchResult> FindAsync(IPAddress address, CancellationToken cancellationToken = default);
 }

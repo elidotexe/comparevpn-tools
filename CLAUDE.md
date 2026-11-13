@@ -217,7 +217,7 @@ codes) are fine here, since developers read them.
 ///      company rather than a home internet provider.
 ///   If the address isn't in the list, it still answers, just without a provider.
 /// </summary>
-public sealed class IspChecker(IAsnDataSource dataSource) : IIspChecker
+public sealed class IspChecker(IAsnDataSource dataSource)
 {
     /// <summary>
     /// Finds the provider behind <paramref name="address"/>. Returns the result with <c>Network</c> set to
@@ -238,4 +238,7 @@ public sealed class IspChecker(IAsnDataSource dataSource) : IIspChecker
 }
 ```
 
-No file is fully in this style yet. When the first feature is refactored, list it here as the reference.
+Reference files already in this style: `AspNetCore/IspCheckerEndpointRouteBuilderExtensions.cs` (endpoints),
+`IspChecker.cs` (the tool, the full version of the example above), `IpToAsnFileDataSource.cs` (a data source) and
+`AspNetCore/IspCheckerDatasetService.cs` (background work), all under `CompareVPN.ISPLookup/Tools/IspChecker/`.
+Outcomes are reported as in `AsnSearchResult` / `IspCheckAnswer`: an enum plus a record with small factory methods.

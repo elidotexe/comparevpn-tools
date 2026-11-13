@@ -1,13 +1,16 @@
 namespace CompareVPN.Tools.IspChecker;
 
 /// <summary>
-/// Networks that host servers (cloud, datacenter, CDN, VPN exit providers) rather than home or
-/// mobile customers, plus networks run by VPN providers themselves. A visitor whose IP belongs to one is very likely using a VPN, proxy or relay.
+/// This class is a hand-kept list of networks that rent out servers (cloud, datacenter and delivery companies, and the
+/// hosts VPN services run on) or belong to VPN services themselves, rather than serving homes and phones. A visitor
+/// whose address belongs to one of them is very likely using a VPN, proxy or relay.
+///
+/// In plain terms, here is what happens:
+///   1. The ISP checker asks whether a network's number is on the list.
+///   2. The answer becomes the "isHosting" flag the visitor sees.
+///   The list is careful rather than complete: a network that isn't on it is not proof of a home connection.
+///   Each entry was checked against the network's name in the iptoasn.com list.
 /// </summary>
-/// <remarks>
-/// Hand-curated and intentionally conservative: being absent from this list does not mean an
-/// IP is residential. Each ASN was checked against the iptoasn.com dataset description.
-/// </remarks>
 public static class HostingNetworks
 {
     private static readonly HashSet<int> Asns =
@@ -55,5 +58,6 @@ public static class HostingNetworks
         20940,  // AKAMAI-ASN1
     ];
 
+    /// <summary>True when the network with this number (<paramref name="asn"/>) is on the list.</summary>
     public static bool Contains(int asn) => Asns.Contains(asn);
 }

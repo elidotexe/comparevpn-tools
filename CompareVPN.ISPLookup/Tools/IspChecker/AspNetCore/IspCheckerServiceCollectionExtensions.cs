@@ -11,35 +11,60 @@ using Microsoft.Extensions.Options;
 
 namespace CompareVPN.Tools.IspChecker.AspNetCore;
 
-/// <summary>Registers the ISP checker services.</summary>
+/// <summary>
+/// This class sets up the ISP checker when the website starts: it is the list of parts the checker needs, and how each
+/// part is configured from the settings.
+///
+/// In plain terms, here is what happens:
+///   1. It reads the <c>Tools:IspChecker</c> settings and has them checked at start-up.
+///   2. It adds the list of networks (read from the file in <c>DataFilePath</c>) and the checker that uses it.
+///   3. It tells the website which servers in front of it may pass on the visitor's real address.
+///   4. It lets the websites in <c>AllowedOrigins</c> call the API from a visitor's browser.
+///   5. It limits how many typed-address lookups each visitor can make per minute.
+///   6. It adds the background job that loads and reloads the file, and the <c>/healthz</c> check.
+/// </summary>
 public static class IspCheckerServiceCollectionExtensions
 {
     /// <summary>
-    /// Adds the ISP checker with options bound from <paramref name="configuration"/> (the <c>Tools:IspChecker</c> section),
-    /// plus the trusted proxies, CORS policy, rate limiting, dataset reloading and health check it needs.
+    /// Adds the ISP checker and everything it needs, with settings from <paramref name="configuration"/> (the
+    /// <c>Tools:IspChecker</c> section). The app still has to call <c>UseForwardedHeaders()</c>, <c>UseCors()</c> and
+    /// <c>UseRateLimiter()</c>, and <c>MapIspChecker()</c> for the web addresses.
     /// </summary>
     public static IServiceCollection AddIspChecker(this IServiceCollection services, IConfiguration configuration)
     {
+        // Step 1: Settings.
         services.AddValidatedOptions(configuration);
+
+        // Step 2: The list of networks and the checker.
         services.AddLookup();
+
+        // Step 3: Trusted proxies.
         services.AddTrustedProxies();
+
+        // Step 4: Which websites may call the API.
         services.AddCorsPolicy();
+
+        // Step 5: The lookup limit.
         services.AddRateLimiting();
 
+        // Step 6: Loading the file in the background, and the health check.
         services.AddHostedService<IspCheckerDatasetService>();
         services.AddHealthChecks().AddCheck<IspCheckerHealthCheck>("isp-dataset");
 
         return services;
     }
 
+    // ───── Helpers for each part (steps 1–5) ─────
+
+    /// <summary>Step 1: Reads the settings, checks them at start-up, and accepts lists written as one value.</summary>
     private static void AddValidatedOptions(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddOptions<IspCheckerOptions>().Bind(configuration).ValidateOnStart();
         services.TryAddEnumerable(ServiceDescriptor.Singleton<IValidateOptions<IspCheckerOptions>, IspCheckerOptionsValidator>());
 
-        // The binder only fills arrays from indexed keys (TrustedProxies__0). Also accept a plain value
-        // (Tools__IspChecker__TrustedProxies=172.18.0.0/16, comma-separated for several), which is how
-        // these are usually written in Docker / compose environments.
+        // .NET only fills list settings from numbered keys (TrustedProxies__0, __1, …). Also accept one plain value
+        // (Tools__IspChecker__TrustedProxies=172.18.0.0/16, comma-separated for several), which is how these are
+        // usually written in Docker and compose files.
         services.PostConfigure<IspCheckerOptions>(options =>
         {
             options.TrustedProxies = WithScalar(options.TrustedProxies, configuration[nameof(IspCheckerOptions.TrustedProxies)]);
@@ -50,22 +75,24 @@ public static class IspCheckerServiceCollectionExtensions
             string.IsNullOrWhiteSpace(scalar) ? values : [.. values, scalar];
     }
 
+    /// <summary>Step 2: The file-based list of networks, and the checker that uses it.</summary>
     private static void AddLookup(this IServiceCollection services)
     {
         services.TryAddSingleton(TimeProvider.System);
 
+        // A relative DataFilePath starts from the app's folder.
         services.AddSingleton<IAsnDataSource>(sp =>
         {
             var options = sp.GetRequiredService<IOptions<IspCheckerOptions>>().Value;
             var contentRoot = sp.GetRequiredService<IHostEnvironment>().ContentRootPath;
             return new IpToAsnFileDataSource(Path.GetFullPath(options.DataFilePath, contentRoot));
         });
-        services.AddSingleton<IIspChecker, Tools.IspChecker.IspChecker>();
+        services.AddSingleton<IspChecker>();
     }
 
     /// <summary>
-    /// Trusted reverse proxies for X-Forwarded-For. Only applied when configured; otherwise the
-    /// ASP.NET Core default (loopback only) stays. The app still has to call <c>UseForwardedHeaders()</c>.
+    /// Step 3: The servers allowed to pass on the visitor's address in <c>X-Forwarded-For</c>. Only changed when
+    /// <c>TrustedProxies</c> is set; otherwise .NET's default (only this computer) stays.
     /// </summary>
     private static void AddTrustedProxies(this IServiceCollection services)
     {
@@ -83,16 +110,15 @@ public static class IspCheckerServiceCollectionExtensions
                 forwarded.KnownIPNetworks.Add(network);
             }
 
-            // Walk back through every trusted hop (e.g. Cloudflare → nginx → app) to the first untrusted
-            // address, which is the visitor. Only trusted proxies can add entries, so this is not spoofable.
+            // Walk back through every trusted server (e.g. Cloudflare → nginx → app) to the first untrusted address,
+            // which is the visitor. Only trusted servers' entries are believed, so a visitor can't fake their address.
             forwarded.ForwardLimit = null;
         });
     }
 
     /// <summary>
-    /// CORS for the API endpoints only, so browser JavaScript on the configured sites can read responses.
-    /// Read-only and anonymous: GET only, no cookies or credentials. With no origins configured the
-    /// policy allows nothing and responses stay same-origin.
+    /// Step 4: Lets pages on the <c>AllowedOrigins</c> websites read the API's answers from the browser (CORS), for the
+    /// API only. Read-only and anonymous: GET only, no cookies or logins. With no websites set, nothing is allowed.
     /// </summary>
     private static void AddCorsPolicy(this IServiceCollection services)
     {
@@ -121,31 +147,15 @@ public static class IspCheckerServiceCollectionExtensions
     }
 
     /// <summary>
-    /// Limits the "look up any IP" endpoint per client. The client address is only held in memory
-    /// as a partition key for the current window; it is never logged or persisted.
+    /// Step 5: Limits typed-address lookups per visitor. The visitor's address is only kept in memory, to count their
+    /// lookups in the current minute; it is never logged or stored.
     /// </summary>
     private static void AddRateLimiting(this IServiceCollection services)
     {
         services.AddRateLimiter(limiter =>
         {
             limiter.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
-
-            // Same problem+json shape as the other errors, so clients can always read { detail }.
-            limiter.OnRejected = async (rejected, cancellationToken) =>
-            {
-                var response = rejected.HttpContext.Response;
-                response.Headers.CacheControl = "no-store";
-
-                var retryAfter = rejected.Lease.TryGetMetadata(MetadataName.RetryAfter, out var wait)
-                    ? (int)Math.Ceiling(wait.TotalSeconds)
-                    : 60;
-                response.Headers.RetryAfter = retryAfter.ToString(System.Globalization.CultureInfo.InvariantCulture);
-
-                await Results.Problem(
-                        $"Too many lookups. Try again in {retryAfter} seconds.",
-                        statusCode: StatusCodes.Status429TooManyRequests)
-                    .ExecuteAsync(rejected.HttpContext);
-            };
+            limiter.OnRejected = (rejected, _) => AnswerTooManyLookupsAsync(rejected);
 
             limiter.AddPolicy(IspCheckerEndpointRouteBuilderExtensions.LookupRateLimitPolicy, context =>
             {
@@ -160,5 +170,25 @@ public static class IspCheckerServiceCollectionExtensions
                     });
             });
         });
+    }
+
+    /// <summary>
+    /// Step 5: Answers a visitor who went over the limit, saying how many seconds to wait. Uses the same kind of error
+    /// answer as the others, so calling pages can always read its "detail" message.
+    /// </summary>
+    private static async ValueTask AnswerTooManyLookupsAsync(OnRejectedContext rejected)
+    {
+        var response = rejected.HttpContext.Response;
+        response.Headers.CacheControl = "no-store";
+
+        var retryAfter = rejected.Lease.TryGetMetadata(MetadataName.RetryAfter, out var wait)
+            ? (int)Math.Ceiling(wait.TotalSeconds)
+            : 60;
+        response.Headers.RetryAfter = retryAfter.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+        await Results.Problem(
+                $"Too many lookups. Try again in {retryAfter} seconds.",
+                statusCode: StatusCodes.Status429TooManyRequests)
+            .ExecuteAsync(rejected.HttpContext);
     }
 }

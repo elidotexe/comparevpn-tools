@@ -36,7 +36,7 @@ public class IpToAsnFileDataSourceTests
     {
         var source = new IpToAsnFileDataSource(WritePlain());
 
-        var lookup = await source.FindAsync(IPAddress.Parse(ip));
+        var lookup = (await source.FindAsync(IPAddress.Parse(ip))).Match;
 
         Assert.That(lookup, Is.Not.Null);
         Assert.Multiple(() =>
@@ -51,7 +51,7 @@ public class IpToAsnFileDataSourceTests
     [TestCase("2001:4860:4860::8888", "2001:4860::", "2001:4860:ffff:ffff:ffff:ffff:ffff:ffff")]
     public async Task FindAsync_ReturnsMatchingRange(string ip, string expectedStart, string expectedEnd)
     {
-        var lookup = await new IpToAsnFileDataSource(WritePlain()).FindAsync(IPAddress.Parse(ip));
+        var lookup = (await new IpToAsnFileDataSource(WritePlain()).FindAsync(IPAddress.Parse(ip))).Match;
 
         Assert.Multiple(() =>
         {
@@ -67,20 +67,26 @@ public class IpToAsnFileDataSourceTests
         var timestamp = new DateTime(2026, 11, 1, 6, 0, 0, DateTimeKind.Utc);
         File.SetLastWriteTimeUtc(path, timestamp);
 
-        var lookup = await new IpToAsnFileDataSource(path).FindAsync(IPAddress.Parse("8.8.8.8"));
+        var search = await new IpToAsnFileDataSource(path).FindAsync(IPAddress.Parse("8.8.8.8"));
 
-        Assert.That(lookup!.DataUpdatedAt, Is.EqualTo(new DateTimeOffset(timestamp)));
+        Assert.That(search.DataUpdatedAt, Is.EqualTo(new DateTimeOffset(timestamp)));
     }
 
     [TestCase("1.0.2.1")]   // unrouted (ASN 0)
     [TestCase("9.9.9.9")]   // not in dataset
     [TestCase("0.0.0.1")]   // below first range
     [TestCase("2606:4700::1111")]
-    public async Task FindAsync_ReturnsNull_WhenAddressIsNotAnnounced(string ip)
+    public async Task FindAsync_ReturnsNotInDataset_WhenAddressIsNotAnnounced(string ip)
     {
         var source = new IpToAsnFileDataSource(WritePlain());
 
-        Assert.That(await source.FindAsync(IPAddress.Parse(ip)), Is.Null);
+        var search = await source.FindAsync(IPAddress.Parse(ip));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(search.Outcome, Is.EqualTo(AsnSearchOutcome.NotInDataset));
+            Assert.That(search.Match, Is.Null);
+        });
     }
 
     [Test]
@@ -93,18 +99,20 @@ public class IpToAsnFileDataSourceTests
             await writer.WriteAsync(Dataset);
         }
 
-        var record = await new IpToAsnFileDataSource(path).FindAsync(IPAddress.Parse("8.8.4.4"));
+        var outside = await new IpToAsnFileDataSource(path).FindAsync(IPAddress.Parse("8.8.4.4"));
 
-        Assert.That(record, Is.Null, "8.8.4.4 is outside 8.8.8.0/24");
-        Assert.That((await new IpToAsnFileDataSource(path).FindAsync(IPAddress.Parse("8.8.8.8")))?.Network.Asn, Is.EqualTo(15169));
+        Assert.That(outside.Match, Is.Null, "8.8.4.4 is outside 8.8.8.0/24");
+        Assert.That((await new IpToAsnFileDataSource(path).FindAsync(IPAddress.Parse("8.8.8.8"))).Match?.Network.Asn, Is.EqualTo(15169));
     }
 
     [Test]
-    public void FindAsync_Throws_WhenFileIsMissing()
+    public async Task FindAsync_ReturnsDataNotAvailable_WhenFileIsMissing()
     {
         var source = new IpToAsnFileDataSource(Path.Combine(_directory, "missing.tsv"));
 
-        Assert.ThrowsAsync<FileNotFoundException>(async () => await source.FindAsync(IPAddress.Parse("8.8.8.8")));
+        var search = await source.FindAsync(IPAddress.Parse("8.8.8.8"));
+
+        Assert.That(search.Outcome, Is.EqualTo(AsnSearchOutcome.DataNotAvailable));
     }
 
     [Test]
@@ -112,11 +120,11 @@ public class IpToAsnFileDataSourceTests
     {
         var path = Path.Combine(_directory, "late.tsv");
         var source = new IpToAsnFileDataSource(path);
-        Assert.ThrowsAsync<FileNotFoundException>(async () => await source.FindAsync(IPAddress.Parse("8.8.8.8")));
+        Assert.That((await source.FindAsync(IPAddress.Parse("8.8.8.8"))).Outcome, Is.EqualTo(AsnSearchOutcome.DataNotAvailable));
 
         await File.WriteAllTextAsync(path, Dataset);
 
-        Assert.That((await source.FindAsync(IPAddress.Parse("8.8.8.8")))?.Network.Asn, Is.EqualTo(15169));
+        Assert.That((await source.FindAsync(IPAddress.Parse("8.8.8.8"))).Match?.Network.Asn, Is.EqualTo(15169));
     }
 
     private string WritePlain()

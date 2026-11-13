@@ -1,35 +1,38 @@
 namespace CompareVPN.Tools.IspChecker.AspNetCore;
 
-/// <summary>Options bound from configuration (e.g. the <c>Tools:IspChecker</c> section).</summary>
+/// <summary>
+/// This class holds the ISP checker's settings, read from the <c>Tools:IspChecker</c> section of the configuration
+/// (or <c>Tools__IspChecker__&lt;Name&gt;</c> environment variables). Every setting has a safe default, and
+/// <see cref="IspCheckerOptionsValidator"/> checks them when the website starts.
+/// </summary>
 public sealed class IspCheckerOptions
 {
     /// <summary>
-    /// Path to the iptoasn.com dataset (<c>ip2asn-combined.tsv.gz</c>).
-    /// Relative paths are resolved against the app's content root; use an absolute path in production
-    /// (e.g. via the <c>Tools__IspChecker__DataFilePath</c> environment variable).
+    /// Where the iptoasn.com file (<c>ip2asn-combined.tsv.gz</c>) is. A relative path starts from the app's folder;
+    /// use a full path in production.
     /// </summary>
     public string DataFilePath { get; set; } = "data/ip2asn-combined.tsv.gz";
 
-    /// <summary>Per-client limit for looking up arbitrary IPs (<c>GET {pattern}/{ip}</c>).</summary>
+    /// <summary>How many typed-address lookups (<c>GET {pattern}/{ip}</c>) each visitor may make per minute.</summary>
     public int LookupRequestsPerMinute { get; set; } = 30;
 
     /// <summary>
-    /// Reverse proxies allowed to set <c>X-Forwarded-For</c>, as IPs or CIDR blocks
-    /// (e.g. <c>172.18.0.0/16</c> for a Docker network). Entries may also be comma-separated.
-    /// When empty, only loopback is trusted. When set, it <em>replaces</em> the loopback default.
+    /// Servers in front of the website (reverse proxies) that may pass on the visitor's address in
+    /// <c>X-Forwarded-For</c>, as addresses or blocks such as <c>172.18.0.0/16</c> for a Docker network. Entries may be
+    /// comma-separated. Empty means only this computer is trusted; once set, it <em>replaces</em> that default.
     /// </summary>
     public string[] TrustedProxies { get; set; } = [];
 
     /// <summary>
-    /// Websites whose browser JavaScript may call the API, e.g. <c>https://comparevpn.com</c>.
-    /// Supports <c>https://*.example.com</c> for subdomains and <c>*</c> for any site. Entries may also be
-    /// comma-separated. When empty, CORS is off and only same-origin pages can read responses.
+    /// Websites whose pages may call the API from the browser, e.g. <c>https://comparevpn.co</c>.
+    /// <c>https://*.example.com</c> covers every site under example.com and <c>*</c> covers any site. Entries may be
+    /// comma-separated. Empty turns this off, so only pages from this website itself can read the answers.
     /// </summary>
     public string[] AllowedOrigins { get; set; } = [];
 
-    /// <summary>How often to check the dataset file for changes and reload it. Zero disables reloading.</summary>
+    /// <summary>How often to check the file for a newer copy. Zero turns reloading off.</summary>
     public TimeSpan ReloadCheckInterval { get; set; } = TimeSpan.FromMinutes(1);
 
-    /// <summary>Data older than this makes <c>/healthz</c> report <c>Degraded</c> (still HTTP 200).</summary>
+    /// <summary>When the loaded data is older than this, <c>/healthz</c> reports <c>Degraded</c> (still answering 200).</summary>
     public TimeSpan MaxDataAge { get; set; } = TimeSpan.FromDays(3);
 }

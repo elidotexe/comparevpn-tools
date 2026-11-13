@@ -26,12 +26,12 @@ public class DatasetReloadTests
     {
         Write(OldData, new DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc));
         var source = new IpToAsnFileDataSource(_path);
-        Assert.That((await source.FindAsync(IPAddress.Parse("8.8.8.8")))!.Network.Asn, Is.EqualTo(15169));
+        Assert.That((await source.FindAsync(IPAddress.Parse("8.8.8.8"))).Match!.Network.Asn, Is.EqualTo(15169));
 
         Write(NewData, new DateTime(2026, 11, 2, 0, 0, 0, DateTimeKind.Utc));
 
-        Assert.That(await source.ReloadIfChangedAsync(), Is.True);
-        var lookup = await source.FindAsync(IPAddress.Parse("8.8.8.8"));
+        Assert.That(await source.ReloadIfChangedAsync(), Is.EqualTo(DatasetReloadOutcome.Loaded));
+        var lookup = (await source.FindAsync(IPAddress.Parse("8.8.8.8"))).Match;
         Assert.Multiple(() =>
         {
             Assert.That(lookup!.Network.Asn, Is.EqualTo(64512));
@@ -46,7 +46,7 @@ public class DatasetReloadTests
         var source = new IpToAsnFileDataSource(_path);
         await source.ReloadIfChangedAsync(); // initial load
 
-        Assert.That(await source.ReloadIfChangedAsync(), Is.False);
+        Assert.That(await source.ReloadIfChangedAsync(), Is.EqualTo(DatasetReloadOutcome.NoChange));
     }
 
     [Test]
@@ -61,7 +61,7 @@ public class DatasetReloadTests
         Assert.ThrowsAsync<InvalidDataException>(() => source.ReloadIfChangedAsync());
         Assert.Multiple(async () =>
         {
-            Assert.That((await source.FindAsync(IPAddress.Parse("8.8.8.8")))!.Network.Asn, Is.EqualTo(15169));
+            Assert.That((await source.FindAsync(IPAddress.Parse("8.8.8.8"))).Match!.Network.Asn, Is.EqualTo(15169));
             Assert.That(source.DataUpdatedAt, Is.EqualTo(new DateTimeOffset(2026, 11, 1, 0, 0, 0, TimeSpan.Zero)));
         });
     }
@@ -75,20 +75,20 @@ public class DatasetReloadTests
 
         File.Delete(_path);
 
-        Assert.That(await source.ReloadIfChangedAsync(), Is.False);
-        Assert.That((await source.FindAsync(IPAddress.Parse("8.8.8.8")))!.Network.Asn, Is.EqualTo(15169));
+        Assert.That(await source.ReloadIfChangedAsync(), Is.EqualTo(DatasetReloadOutcome.NoChange));
+        Assert.That((await source.FindAsync(IPAddress.Parse("8.8.8.8"))).Match!.Network.Asn, Is.EqualTo(15169));
     }
 
     [Test]
     public async Task ReloadIfChanged_LoadsFile_ThatAppearsAfterStartup()
     {
         var source = new IpToAsnFileDataSource(_path);
-        Assert.ThrowsAsync<FileNotFoundException>(() => source.ReloadIfChangedAsync());
+        Assert.That(await source.ReloadIfChangedAsync(), Is.EqualTo(DatasetReloadOutcome.FileMissing));
         Assert.That(source.IsLoaded, Is.False);
 
         Write(OldData, new DateTime(2026, 11, 1, 0, 0, 0, DateTimeKind.Utc));
 
-        Assert.That(await source.ReloadIfChangedAsync(), Is.True);
+        Assert.That(await source.ReloadIfChangedAsync(), Is.EqualTo(DatasetReloadOutcome.Loaded));
         Assert.That(source.IsLoaded, Is.True);
     }
 

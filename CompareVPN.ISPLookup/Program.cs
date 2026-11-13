@@ -1,13 +1,21 @@
+// The ISP lookup website: the API that tells visitors which internet provider is behind an address, plus a small
+// demo page.
+//
+// In plain terms, here is what happens when it starts:
+//   1. It sets up the ISP checker from the Tools:IspChecker settings: the list of networks and its daily reload,
+//      trusted proxies, which websites may call the API, the lookup limit and the health check.
+//   2. It reads the visitor's real address from X-Forwarded-For, but only when a trusted proxy sent it.
+//   3. It puts the request steps in order, then opens the API at /api/tools/isp and the health check at /healthz.
+
 using CompareVPN.Tools.IspChecker.AspNetCore;
 using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Also configures trusted proxies (TrustedProxies), CORS (AllowedOrigins), dataset reloading and health checks.
+// Step 1: The ISP checker and everything it needs.
 builder.Services.AddIspChecker(builder.Configuration.GetSection("Tools:IspChecker"));
 
-// Read the visitor IP from X-Forwarded-For, but only when it comes from a trusted proxy:
-// loopback by default, or the networks listed in Tools:IspChecker:TrustedProxies.
+// Step 2: Which proxies count as trusted is set by AddIspChecker (only this computer, unless TrustedProxies says otherwise).
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
@@ -15,8 +23,9 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 
 var app = builder.Build();
 
+// Step 3: Request steps, in the order each request passes through them.
 app.UseForwardedHeaders();
-app.UseCors();          // before the rate limiter, so 429 responses carry CORS headers too
+app.UseCors(); // Before the rate limiter, so "too many lookups" answers can still be read by the calling website.
 app.UseRateLimiter();
 app.UseDefaultFiles();
 app.UseStaticFiles();
