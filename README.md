@@ -1,7 +1,7 @@
 # CompareVPN.ISPLookup
 
 Who is your ISP? Find the internet provider, network (ASN), and country behind your IP address.
-An open-source tool for the [CompareVPN tools page](https://comparevpn.com/tools), which you can inspect or self-host.
+An open-source tool for the [CompareVPN](https://comparevpn.co) website, which you can inspect or self-host.
 
 The solution contains one ASP.NET Core application, `CompareVPN.ISPLookup`.
 The repository and solution keep the broader CompareVPN Tools name for future tools.
@@ -68,7 +68,7 @@ Invalid values stop the app at startup with a message naming the bad entry.
 |---|---|---|
 | `DataFilePath` | `data/ip2asn-combined.tsv.gz` | Dataset path; relative paths resolve against the content root. Use an absolute path in production. |
 | `TrustedProxies` | *(empty: loopback only)* | Reverse proxies allowed to set `X-Forwarded-For`, as IPs or CIDRs, e.g. `172.18.0.0/16`. Replaces the loopback default when set. |
-| `AllowedOrigins` | *(empty: CORS off)* | Sites whose browser JavaScript may call the API, e.g. `https://comparevpn.com`. Supports `https://*.example.com` and `*`. |
+| `AllowedOrigins` | *(empty: CORS off)* | Sites whose browser JavaScript may call the API, e.g. `https://comparevpn.co`. Supports `https://*.example.com` and `*`. |
 | `ReloadCheckInterval` | `00:01:00` | How often to check the dataset file for changes. `00:00:00` disables reloading. |
 | `MaxDataAge` | `3.00:00:00` | Older data makes `/healthz` report `Degraded`. |
 | `LookupRequestsPerMinute` | `30` | Per-client limit for `GET /api/tools/isp/{ip}`. |
@@ -78,7 +78,7 @@ Invalid values stop the app at startup with a message naming the bad entry.
 To call the API from JavaScript on another site, allow that site's origin:
 
 ```bash
-Tools__IspChecker__AllowedOrigins=https://comparevpn.com, https://*.comparevpn.com
+Tools__IspChecker__AllowedOrigins=https://comparevpn.co, https://*.comparevpn.co
 ```
 
 ```js
@@ -95,7 +95,7 @@ Notes:
 - CORS applies to the API endpoints only (not `/healthz`) and allows `GET` only, with no cookies or
   credentials. Requests need no special headers, so browsers send them without a preflight.
 - `429` and error responses carry the CORS headers too, so the page can show a proper message.
-- An origin is scheme + host (+ port): `https://comparevpn.com`, not `https://comparevpn.com/tools`.
+- An origin is scheme + host (+ port): `https://comparevpn.co`, not `https://comparevpn.co/tools`.
   Invalid entries stop the app at startup.
 - Because the browser connects directly, the API sees the visitor's IP. If the API sits behind a
   reverse proxy or CDN, configure `TrustedProxies` as described below.

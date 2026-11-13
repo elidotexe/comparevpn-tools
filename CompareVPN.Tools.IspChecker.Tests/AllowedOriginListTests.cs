@@ -7,7 +7,7 @@ public class AllowedOriginListTests
     public void TryParse_NormalisesOriginsTheWayBrowsersSendThem()
     {
         var ok = AllowedOriginList.TryParse(
-            ["https://CompareVPN.com/", "http://localhost:3000, https://*.comparevpn.com", "https://example.com:443", "https://comparevpn.com"],
+            ["https://CompareVPN.co/", "http://localhost:3000, https://*.comparevpn.co", "https://example.com:443", "https://comparevpn.co"],
             out var origins, out var invalid);
 
         Assert.Multiple(() =>
@@ -15,9 +15,9 @@ public class AllowedOriginListTests
             Assert.That(ok, Is.True, invalid);
             Assert.That(origins, Is.EqualTo(new[]
             {
-                "https://comparevpn.com",
+                "https://comparevpn.co",
                 "http://localhost:3000",
-                "https://*.comparevpn.com",
+                "https://*.comparevpn.co",
                 "https://example.com",
             }));
         });
@@ -30,11 +30,11 @@ public class AllowedOriginListTests
         Assert.That(origins, Is.EqualTo(new[] { "*" }));
     }
 
-    [TestCase("comparevpn.com")]               // no scheme
-    [TestCase("https://comparevpn.com/tools")] // path
-    [TestCase("https://comparevpn.com?x=1")]
-    [TestCase("ftp://comparevpn.com")]
-    [TestCase("https://user@comparevpn.com")]
+    [TestCase("comparevpn.co")]               // no scheme
+    [TestCase("https://comparevpn.co/tools")] // path
+    [TestCase("https://comparevpn.co?x=1")]
+    [TestCase("ftp://comparevpn.co")]
+    [TestCase("https://user@comparevpn.co")]
     public void TryParse_RejectsAnythingThatIsNotABareOrigin(string entry)
     {
         var ok = AllowedOriginList.TryParse([entry], out _, out var invalid);
