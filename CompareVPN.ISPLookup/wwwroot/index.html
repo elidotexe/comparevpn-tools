@@ -1,0 +1,207 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ISP Lookup Demo</title>
+  <style>
+    :root {
+      --bg: #f7f7f8; --card: #ffffff; --text: #16181d; --muted: #5d6370; --line: #e3e5ea;
+      --accent: #2456d6; --accent-soft: #e9efff; --warn-soft: #fff4e0; --warn: #8a5300;
+      --ok-soft: #e6f6ec; --ok: #1d6b3a; --radius: 14px;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #111317; --card: #1a1d23; --text: #eceef2; --muted: #9aa1ad; --line: #2b2f37;
+        --accent: #7ea2ff; --accent-soft: #1f2a45; --warn-soft: #3a2c12; --warn: #f3c374;
+        --ok-soft: #16301f; --ok: #8fdcab;
+      }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font: 16px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    }
+    main { max-width: 40rem; margin: 0 auto; padding: 2.5rem 1rem 4rem; }
+    h1 { font-size: 2rem; line-height: 1.2; margin: 0 0 .5rem; }
+    .lead { color: var(--muted); margin: 0 0 1.5rem; }
+    .card { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 1.25rem 1.25rem 1rem; }
+    .label { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0; }
+    .isp { font-size: 1.75rem; font-weight: 700; line-height: 1.25; margin: .15rem 0 .1rem; overflow-wrap: anywhere; }
+    .raw { color: var(--muted); font-size: .85rem; margin: 0 0 1rem; overflow-wrap: anywhere; }
+    dl { display: grid; grid-template-columns: max-content 1fr; gap: .55rem 1rem; margin: 0; padding-top: 1rem; border-top: 1px solid var(--line); }
+    dt { color: var(--muted); }
+    dd { margin: 0; font-weight: 500; overflow-wrap: anywhere; display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; }
+    .hint { color: var(--muted); font-weight: 400; font-size: .85rem; }
+    a { color: var(--accent); }
+    button, input { font: inherit; }
+    .copy { border: 1px solid var(--line); background: transparent; color: var(--muted); border-radius: 8px; padding: 0 .5rem; font-size: .8rem; cursor: pointer; }
+    .badge { display: inline-block; font-size: .8rem; font-weight: 600; border-radius: 999px; padding: .1rem .6rem; }
+    .badge.warn { background: var(--warn-soft); color: var(--warn); }
+    .badge.ok { background: var(--ok-soft); color: var(--ok); }
+    .callout { margin-top: 1rem; padding: .9rem 1rem; border-radius: 10px; background: var(--accent-soft); }
+    .callout p { margin: 0 0 .4rem; }
+    .callout p:last-child { margin: 0; }
+    .meta { color: var(--muted); font-size: .85rem; margin: .9rem 0 0; }
+    form { display: flex; gap: .5rem; margin-top: 1.5rem; }
+    input { flex: 1; min-width: 0; padding: .65rem .8rem; border: 1px solid var(--line); border-radius: 10px; background: var(--card); color: var(--text); }
+    form button { padding: .65rem 1rem; border: 0; border-radius: 10px; background: var(--accent); color: #fff; font-weight: 600; cursor: pointer; }
+    @media (prefers-color-scheme: dark) { form button { color: #0d1220; } }
+    .back { background: none; border: 0; color: var(--accent); padding: 0; cursor: pointer; text-decoration: underline; font-size: .9rem; }
+    .error { color: var(--warn); }
+    @media (max-width: 30rem) { dl { grid-template-columns: 1fr; gap: .1rem; } dd { margin-bottom: .5rem; } }
+  </style>
+</head>
+<body>
+<main>
+  <h1>What's my ISP?</h1>
+  <p class="lead">Find out which internet service provider, network and country your IP address belongs to.</p>
+
+  <section class="card" id="result" aria-live="polite">
+    <p class="label">Checking your connection…</p>
+  </section>
+
+  <form id="lookup" novalidate>
+    <label for="ip" class="label" hidden>IP address</label>
+    <input id="ip" name="ip" placeholder="Look up another IP, e.g. 8.8.8.8" autocomplete="off" spellcheck="false" inputmode="text">
+    <button type="submit">Look up</button>
+  </form>
+
+  <p class="meta">
+    The lookup runs on this server against a local copy of the public-domain iptoasn.com dataset.
+    Your IP is never logged, stored or sent to a third party.
+    <a href="https://github.com/elidotexe/comparevpn-tools">Read the code</a>.
+  </p>
+</main>
+
+<script>
+  const API = '/api/tools/isp';
+
+  const result = document.getElementById('result');
+  const form = document.getElementById('lookup');
+  const input = document.getElementById('ip');
+  const regionNames = (() => { try { return new Intl.DisplayNames(['en'], { type: 'region' }); } catch { return null; } })();
+
+  // Tiny DOM helper: h('p', { class: 'x' }, 'text', childNode). Text is always set as text, never HTML.
+  function h(tag, attrs, ...children) {
+    const el = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs ?? {})) {
+      if (k.startsWith('on')) el.addEventListener(k.slice(2), v); else el.setAttribute(k, v);
+    }
+    for (const c of children.flat()) if (c != null && c !== false) el.append(c);
+    return el;
+  }
+
+  const flag = code => /^[A-Z]{2}$/.test(code ?? '')
+    ? String.fromCodePoint(...[...code].map(c => 0x1F1E6 + c.charCodeAt(0) - 65)) : '';
+  const countryName = code => { try { return regionNames?.of(code) ?? code; } catch { return code; } };
+
+  function copyButton(text) {
+    const btn = h('button', { type: 'button', class: 'copy', 'aria-label': 'Copy IP address' }, 'Copy');
+    btn.addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(text); btn.textContent = 'Copied'; }
+      catch { btn.textContent = 'Copy failed'; }
+      setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+    });
+    return btn;
+  }
+
+  function formatUpdated(iso) {
+    if (!iso) return null;
+    const date = new Date(iso);
+    const hours = (Date.now() - date) / 36e5;
+    if (hours < 1) return 'less than an hour ago';
+    if (hours < 48) return `${Math.round(hours)} hour${Math.round(hours) === 1 ? '' : 's'} ago`;
+    return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  function render(d, isSelf) {
+    const n = d.network;
+    const rows = [
+      h('dt', null, 'IP address'),
+      h('dd', null, d.ipAddress, h('span', { class: 'hint' }, `IPv${d.ipVersion}`), copyButton(d.ipAddress)),
+    ];
+
+    if (n) {
+      rows.push(
+        h('dt', null, 'ASN'),
+        h('dd', null, h('a', { href: `https://bgp.he.net/AS${n.asn}`, rel: 'noopener', target: '_blank' }, `AS${n.asn}`)),
+        h('dt', null, 'Network registered in'),
+        h('dd', null, n.countryCode ? `${flag(n.countryCode)} ${countryName(n.countryCode)}` : 'Unknown',
+          h('span', { class: 'hint' }, '(where the network is registered, not your exact location)')),
+        h('dt', null, 'IP range'),
+        h('dd', null, `${n.range.start} – ${n.range.end}`),
+        h('dt', null, 'Network type'),
+        h('dd', null, n.isHosting
+          ? h('span', { class: 'badge warn' }, 'Datacenter / VPN network')
+          : h('span', { class: 'badge ok' }, 'Internet provider')),
+      );
+    }
+
+    const subject = isSelf ? 'Your ISP' : `ISP for ${d.ipAddress}`;
+    let heading, raw = null, callout = null;
+
+    if (!d.isPublic) {
+      heading = 'Private address';
+      callout = h('div', { class: 'callout' },
+        h('p', null, `${d.ipAddress} is a private or local address, so it doesn't belong to any ISP.`),
+        isSelf ? h('p', null, "If you're seeing this on a live site, the server is behind a proxy that isn't forwarding the visitor's IP.") : null);
+    } else if (!n) {
+      heading = 'Unknown network';
+      callout = h('div', { class: 'callout' }, h('p', null, "This address isn't announced by any network in our dataset. It may be unassigned or very new."));
+    } else {
+      heading = n.name;
+      raw = n.organization !== n.name ? n.organization : null;
+      callout = n.isHosting
+        ? h('div', { class: 'callout' },
+            h('p', null, h('strong', null, isSelf ? 'You appear to be using a VPN, proxy or relay.' : 'This IP belongs to a datacenter or VPN network.')),
+            h('p', null, isSelf
+              ? `${n.name} runs servers, not home internet, so your real ISP is hidden from the sites you visit.`
+              : `${n.name} hosts servers and VPN exits rather than home or mobile customers.`))
+        : h('div', { class: 'callout' },
+            h('p', null, h('strong', null, isSelf
+              ? `${n.name} can see which websites you visit.`
+              : `${n.name} can see which websites its customers visit.`)),
+            h('p', null, 'Even with HTTPS, an ISP sees the domains its customers connect to, but not page contents.'));
+    }
+
+    const updated = formatUpdated(d.dataUpdatedAt);
+    result.replaceChildren(
+      h('p', { class: 'label' }, subject),
+      h('p', { class: 'isp' }, heading),
+      raw ? h('p', { class: 'raw' }, raw) : null,
+      h('dl', null, rows),
+      callout,
+      updated ? h('p', { class: 'meta' }, `ISP data updated ${updated}.`) : null,
+      isSelf ? null : h('p', { class: 'meta' }, h('button', { type: 'button', class: 'back', onclick: () => load() }, '← Back to my ISP')),
+    );
+  }
+
+  function renderError(message) {
+    result.replaceChildren(h('p', { class: 'label' }, 'Something went wrong'), h('p', { class: 'error' }, message));
+  }
+
+  async function load(ip) {
+    const isSelf = ip == null;
+    result.replaceChildren(h('p', { class: 'label' }, isSelf ? 'Checking your connection…' : `Looking up ${ip}…`));
+    try {
+      const res = await fetch(isSelf ? API : `${API}/${encodeURIComponent(ip)}`, { headers: { Accept: 'application/json' } });
+      if (res.status === 429) return renderError("You've looked up a lot of IPs. Please wait a minute and try again.");
+      const body = await res.json().catch(() => null);
+      if (!res.ok) return renderError(body?.detail ?? `Request failed (${res.status}).`);
+      render(body, isSelf);
+    } catch {
+      renderError("Couldn't reach the server. Check your connection and try again.");
+    }
+  }
+
+  form.addEventListener('submit', e => {
+    e.preventDefault();
+    const ip = input.value.trim();
+    if (ip) load(ip); else input.focus();
+  });
+
+  load();
+</script>
+</body>
+</html>
