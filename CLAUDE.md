@@ -44,10 +44,10 @@ have never seen the CompareVPN site.
 
 This applies to every session: local, Remote Control from the phone, and cloud sessions (claude.ai/code).
 
-- **Branches and pushing:** the main branch is `main`. Cloud sessions work on a branch and open a pull request
-  into `main`; never push to `main`. Local sessions commit but never push unless asked: the owner pushes. Never
+- **Branches and pushing:** the main branch is `master`. Cloud sessions work on a branch and open a pull request
+  into `master`; never push to `master`. Local sessions commit but never push unless asked: the owner pushes. Never
   create or push release tags.
-- **Tests:** `.github/workflows/ci.yml` builds the solution and runs the test project on every push to `main` and
+- **Tests:** `.github/workflows/ci.yml` builds the solution and runs the test project on every push to `master` and
   every pull request. Run the same commands (`dotnet build -c Release` and the `dotnet test` command above)
   before opening a pull request, and only open it when they pass.
 - **Commits:** one feature per commit, and bug fixes in their own commit, separate from refactors. Commit with an
