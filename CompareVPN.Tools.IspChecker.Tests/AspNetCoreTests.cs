@@ -82,6 +82,40 @@ public class IspCheckerOptionsValidatorTests
         });
     }
 
+    [TestCase("")]
+    [TestCase("   ")]
+    public void Fails_WhenDataFilePathIsEmpty(string path)
+    {
+        var result = new IspCheckerOptionsValidator().Validate(null, new IspCheckerOptions { DataFilePath = path });
+
+        Assert.That(result.FailureMessage, Does.Contain("DataFilePath must be set"));
+    }
+
+    [Test]
+    public void Fails_WithOffendingEntry_ForInvalidAllowedOrigin()
+    {
+        var result = new IspCheckerOptionsValidator().Validate(null, new IspCheckerOptions { AllowedOrigins = ["https://comparevpn.co/tools"] });
+
+        Assert.That(result.FailureMessage, Does.Contain("'https://comparevpn.co/tools'"));
+    }
+
+    [Test]
+    public void Fails_WhenLookupLimitIsBelowOne()
+    {
+        var result = new IspCheckerOptionsValidator().Validate(null, new IspCheckerOptions { LookupRequestsPerMinute = 0 });
+
+        Assert.That(result.FailureMessage, Does.Contain("LookupRequestsPerMinute must be at least 1"));
+    }
+
+    [Test]
+    public void ReportsEveryProblem_AtOnce()
+    {
+        var result = new IspCheckerOptionsValidator().Validate(
+            null, new IspCheckerOptions { DataFilePath = "", LookupRequestsPerMinute = 0 });
+
+        Assert.That(result.Failures?.Count(), Is.EqualTo(2));
+    }
+
     [Test]
     public void Fails_ForNegativeReloadInterval()
     {
