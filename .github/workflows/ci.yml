@@ -4,6 +4,7 @@ on:
   push:
     branches: [master]
   pull_request:
+  workflow_call: # lets deploy.yml run the same build and tests first
 
 jobs:
   build:

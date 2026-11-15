@@ -1,0 +1,185 @@
+# Deploys master to an Azure App Service web app that runs the container image, when the owner presses
+# "Run workflow" on GitHub. Self-hosters don't need this: the Dockerfile runs anywhere.
+#
+# In plain terms, here is what happens:
+#   1. It builds the app and runs every test (ci.yml), and stops if one fails.
+#   2. It checks the settings below are filled in, then signs in to Azure without a stored password (GitHub's
+#      federated login, set up once in Azure).
+#   3. It picks the next version number (v1.0.N) and has Azure build the image from this commit.
+#   4. It checks the new image is in the registry, then switches the web app to it.
+#   5. It waits until <API_URL>/version.txt shows the new version, then checks the live app: /healthz answers
+#      200, a lookup of 8.8.8.8 finds Google's network and isn't cached, and (if SMOKE_ORIGIN is set) that
+#      website is allowed to call the API. It also warns if the app can't see the caller's real address, which
+#      means TrustedProxies needs setting.
+#   6. If step 5 fails, it switches the web app back to the image it was running and marks the run red.
+#
+# Needs these repository variables (Settings → Secrets and variables → Actions → Variables). They are kept out
+# of this file so the repository holds no server names:
+#   AZURE_CLIENT_ID, AZURE_TENANT_ID, AZURE_SUBSCRIPTION_ID   the sign-in from step 2
+#   AZURE_RESOURCE_GROUP, AZURE_WEB_APP, AZURE_REGISTRY        where the image is built and run
+#   API_URL                                                    the app's public address, e.g. https://isp-api.example.com
+#   IMAGE_REPOSITORY (optional, default comparevpn-tools)      the image's name in the registry
+#   SMOKE_ORIGIN (optional)                                    a website that must be allowed to call the API
+name: Deploy
+
+on:
+  workflow_dispatch:
+
+# One deploy at a time; a second one waits instead of cancelling a deploy halfway.
+concurrency:
+  group: deploy-tools
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  RESOURCE_GROUP: ${{ vars.AZURE_RESOURCE_GROUP }}
+  WEB_APP: ${{ vars.AZURE_WEB_APP }}
+  REGISTRY: ${{ vars.AZURE_REGISTRY }}
+  REPOSITORY: ${{ vars.IMAGE_REPOSITORY || 'comparevpn-tools' }}
+  API_URL: ${{ vars.API_URL }}
+  SMOKE_ORIGIN: ${{ vars.SMOKE_ORIGIN }}
+
+jobs:
+  # Step 1
+  tests:
+    name: Build and test
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    name: Build image and deploy
+    needs: tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # Only master goes live. Azure also refuses to sign in from any other branch.
+    if: github.ref == 'refs/heads/master'
+    permissions:
+      contents: read
+      id-token: write # lets this job ask GitHub for the token Azure accepts instead of a password
+    steps:
+      - uses: actions/checkout@v5
+
+      # Step 2a: fail early with a clear message instead of halfway through.
+      - name: Check the deploy settings
+        run: |
+          missing=()
+          for name in AZURE_CLIENT_ID AZURE_TENANT_ID AZURE_SUBSCRIPTION_ID RESOURCE_GROUP WEB_APP REGISTRY API_URL; do
+            [[ -n "${!name}" ]] || missing+=("$name")
+          done
+          if (( ${#missing[@]} )); then
+            echo "::error::Missing repository variables: ${missing[*]} (RESOURCE_GROUP, WEB_APP and REGISTRY come from AZURE_RESOURCE_GROUP, AZURE_WEB_APP and AZURE_REGISTRY)."
+            exit 1
+          fi
+          if [[ "$API_URL" != https://* ]]; then
+            echo "::error::API_URL must start with https://"
+            exit 1
+          fi
+        env:
+          AZURE_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # Step 2b
+      - name: Sign in to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      # Step 3a: the running image (to roll back to) and the next version (the highest v1.0.N in the registry, plus one).
+      - name: Work out versions
+        id: versions
+        run: |
+          running=$(az webapp config show -g "$RESOURCE_GROUP" -n "$WEB_APP" --query linuxFxVersion -o tsv)
+          last=$(az acr repository show-tags -n "$REGISTRY" --repository "$REPOSITORY" -o tsv 2>/dev/null \
+            | grep -E '^v1\.0\.[0-9]+$' | sed 's/^v1\.0\.//' | sort -n | tail -1 || true)
+          next="v1.0.$(( ${last:-0} + 1 ))"
+          login_server=$(az acr show -n "$REGISTRY" --query loginServer -o tsv)
+
+          # linuxFxVersion looks like "DOCKER|<registry>/<image>:v1.0.4"; keep what follows "DOCKER|".
+          echo "running_image=${running#DOCKER|}" >> "$GITHUB_OUTPUT"
+          echo "next=$next" >> "$GITHUB_OUTPUT"
+          echo "next_image=$login_server/$REPOSITORY:$next" >> "$GITHUB_OUTPUT"
+          echo "Running: ${running#DOCKER|}"
+          echo "Deploying: $next (${GITHUB_SHA::7})"
+
+      # Step 3b: Azure builds the image itself, so no Docker is needed here. The version (e.g. "v1.0.4-dbaf060")
+      # must not contain spaces: Azure's build service passes it to Docker without quotes.
+      - name: Build the image in Azure
+        run: |
+          az acr build -r "$REGISTRY" \
+            -t "$REPOSITORY:${{ steps.versions.outputs.next }}" \
+            --platform linux/amd64 \
+            --build-arg APP_VERSION="${{ steps.versions.outputs.next }}-${GITHUB_SHA::7}" \
+            .
+
+      # Step 4: switching to a tag that isn't in the registry takes the app down, so check first.
+      - name: Check the image is in the registry
+        run: az acr repository show -n "$REGISTRY" --image "$REPOSITORY:${{ steps.versions.outputs.next }}" -o none
+
+      - name: Switch the web app to the new image
+        id: switch
+        run: |
+          az webapp config container set -g "$RESOURCE_GROUP" -n "$WEB_APP" \
+            --container-image-name "${{ steps.versions.outputs.next_image }}" -o none
+
+      # Step 5a: the old version keeps answering while the new one starts, so wait for the new version number.
+      # The random "?v=" stops a cache in front of the app from answering with a saved copy.
+      - name: Wait for the new version to answer
+        run: |
+          for attempt in $(seq 1 60); do
+            live=$(curl -fsSL --max-time 10 "${API_URL%/}/version.txt?v=$RANDOM$attempt" || true)
+            echo "Attempt $attempt: ${live:-no answer}"
+            [[ "$live" == "${{ steps.versions.outputs.next }}-"* ]] && exit 0
+            sleep 10
+          done
+          echo "::error::The new version didn't answer within 10 minutes."
+          exit 1
+
+      # Step 5b: check the live app does its job. The caller's own address is never printed.
+      - name: Smoke test the live app
+        run: |
+          api="${API_URL%/}"
+
+          code=$(curl -s -o health.txt -w '%{http_code}' --max-time 10 "$api/healthz")
+          echo "/healthz: $code $(cat health.txt)"
+          [[ "$code" == 200 ]] || { echo "::error::/healthz answered $code"; exit 1; }
+
+          curl -fsS --max-time 10 -D headers.txt -o lookup.json "$api/api/tools/isp/8.8.8.8"
+          cat lookup.json; echo
+          jq -e '.network.asn == 15169' lookup.json > /dev/null \
+            || { echo "::error::Looking up 8.8.8.8 didn't find Google's network (15169)."; exit 1; }
+          grep -qi '^cache-control:.*no-store' headers.txt \
+            || { echo "::error::Lookups must be sent with Cache-Control: no-store."; exit 1; }
+
+          if [[ -n "$SMOKE_ORIGIN" ]]; then
+            allowed=$(curl -fsS --max-time 10 -o /dev/null -D - -H "Origin: $SMOKE_ORIGIN" "$api/api/tools/isp/1.1.1.1" \
+              | tr -d '\r' | awk -F': ' 'tolower($1) == "access-control-allow-origin" { print $2 }')
+            [[ "$allowed" == "$SMOKE_ORIGIN" ]] \
+              || { echo "::error::$SMOKE_ORIGIN isn't allowed to call the API (check Tools__IspChecker__AllowedOrigins)."; exit 1; }
+            echo "Allowed origin: $allowed"
+          fi
+
+          # This runner calls from a public address. If the app only sees a private one, it is reading the
+          # address of the proxy in front of it: every visitor would get the wrong answer.
+          if [[ "$(curl -fsS --max-time 10 "$api/api/tools/isp" | jq -r '.isPublic')" != true ]]; then
+            echo "::warning::The app sees a private address instead of the caller's. Set Tools__IspChecker__TrustedProxies (see the README)."
+          fi
+
+      # Step 6: only if the switch happened and something after it failed.
+      - name: Roll back to the previous image
+        if: failure() && steps.switch.outcome == 'success'
+        run: |
+          echo "::error::Rolling back to ${{ steps.versions.outputs.running_image }}"
+          az webapp config container set -g "$RESOURCE_GROUP" -n "$WEB_APP" \
+            --container-image-name "${{ steps.versions.outputs.running_image }}" -o none
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Deploy ${{ steps.versions.outputs.next }} (${GITHUB_SHA::7}): ${{ job.status }}"
+            echo "Previous image: ${{ steps.versions.outputs.running_image }}"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -172,6 +172,29 @@ sending their own `X-Forwarded-For`. If Cloudflare (or another CDN) sits in fron
 must be trusted too. A server that calls this API on behalf of visitors (server-side rendering)
 counts as a proxy: add its address and have it forward the visitor's IP in `X-Forwarded-For`.
 
+### Finding the right trusted proxies
+
+On a hosting service you may not know the proxy's address in advance. The app tells you: with
+`TrustedProxies` unset, call `GET /api/tools/isp` from your own computer. If `ipAddress` is a private
+address (`isPublic: false`), that is the proxy in front of the app. Trust its network, e.g.
+`Tools__IspChecker__TrustedProxies=169.254.0.0/16`, and check again: it should now show your own
+address and provider.
+
+Also turn off the hosting service's request logs for this app (or keep them free of addresses):
+the app itself never logs visitors' IPs, and its host shouldn't either.
+
+### Deploying to Azure App Service
+
+`.github/workflows/deploy.yml` is how the CompareVPN instance is deployed; it is optional for
+self-hosters. Pressing **Run workflow** on `master` runs the tests, has Azure Container Registry build
+the image as the next `v1.0.N`, switches an App Service web app to it, waits for `/version.txt` to show
+the new version, checks `/healthz` and a real lookup, and switches back to the previous image if
+those checks fail. It reads every name and address from repository variables (listed at the top of the
+workflow), so the repository holds none.
+
+The web app needs `WEBSITES_PORT=8080`, the health check path `/healthz`, and the settings above
+(`Tools__IspChecker__AllowedOrigins`, `Tools__IspChecker__TrustedProxies`).
+
 ## Repository layout
 
 ```
@@ -179,6 +202,7 @@ CompareVPN.ISPLookup/               Web application (the only project in the sol
   Tools/IspChecker/                 ISP lookup implementation and HTTP integration
   wwwroot/index.html                ISP lookup page
 CompareVPN.Tools.IspChecker.Tests/  Standalone test project
+.github/workflows/                 CI, release artifact, and the optional Azure deploy
 scripts/                           Dataset download helper and the container's start script
 Dockerfile                         Container image (app + dataset + daily refresh)
 data/                              Local ASN dataset
