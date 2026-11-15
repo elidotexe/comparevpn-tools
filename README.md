@@ -102,10 +102,30 @@ Notes:
 
 ## Deployment
 
+### Docker
+
+```bash
+docker build -t comparevpn-tools .
+docker run -p 8080:8080 -e Tools__IspChecker__AllowedOrigins=https://example.com comparevpn-tools
+```
+
+The image is ready to run on its own:
+
+- It contains a copy of the dataset from when it was built, so lookups work as soon as it starts.
+- A small loop in the container downloads a fresh copy right after start and then every
+  `DATASET_REFRESH_INTERVAL` (default `24h`; a number with `s`, `m`, `h` or `d`). Set it to `0` if you mount
+  the dataset and refresh it yourself. A failed download is logged and retried next time; the app keeps
+  serving the data it has.
+- It listens on port `8080` as the unprivileged `app` user, and its Docker `HEALTHCHECK` asks `/healthz`.
+- `GET /version.txt` shows the version passed at build time (`--build-arg APP_VERSION=v1.2.3`), or `dev`.
+  Deploy scripts can wait for it to know the new version is the one answering.
+
+All settings below work as environment variables (`-e Tools__IspChecker__...`).
+
 ### Dataset
 
-The dataset is not part of the publish output. Keep it outside the app directory (in Docker, a
-volume) and point `DataFilePath` at it:
+Without Docker, the dataset is not part of the publish output. Keep it outside the app directory and
+point `DataFilePath` at it:
 
 ```bash
 # Once, and then daily (e.g. cron). The file is replaced atomically.
@@ -159,7 +179,8 @@ CompareVPN.ISPLookup/               Web application (the only project in the sol
   Tools/IspChecker/                 ISP lookup implementation and HTTP integration
   wwwroot/index.html                ISP lookup page
 CompareVPN.Tools.IspChecker.Tests/  Standalone test project
-scripts/                           Dataset download helper (optional target directory argument)
+scripts/                           Dataset download helper and the container's start script
+Dockerfile                         Container image (app + dataset + daily refresh)
 data/                              Local ASN dataset
 ```
 

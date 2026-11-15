@@ -1,0 +1,22 @@
+# Only the app, its build settings and the scripts go into the image. Everything else stays out, so a local
+# folder can never end up in a published image by accident.
+
+# Private, local-only folders
+docs/
+api-samples/
+.env
+
+# The dataset is downloaded fresh while the image is built
+data/
+
+# Build output, tests and editor files
+**/bin/
+**/obj/
+artifacts/
+CompareVPN.Tools.IspChecker.Tests/
+.git/
+.github/
+.idea/
+.vs/
+.vscode/
+**/*.user
