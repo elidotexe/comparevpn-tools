@@ -93,6 +93,14 @@ jobs:
         id: versions
         run: |
           running=$(az webapp config show -g "$RESOURCE_GROUP" -n "$WEB_APP" --query linuxFxVersion -o tsv)
+
+          # Only a single-container web app ("DOCKER|<image>:<tag>") can be switched and switched back. In
+          # Azure's sidecar mode this reads "SITECONTAINERS", which isn't an image to roll back to.
+          if [[ ! "$running" =~ ^DOCKER\|[^|]+:[^|]+$ ]]; then
+            echo "::error::The web app isn't running a single container image (it reports '$running'). Switch it to a single container first: az webapp sitecontainers convert --mode docker -g <group> -n <app>, then set an image."
+            exit 1
+          fi
+
           last=$(az acr repository show-tags -n "$REGISTRY" --repository "$REPOSITORY" -o tsv 2>/dev/null \
             | grep -E '^v1\.0\.[0-9]+$' | sed 's/^v1\.0\.//' | sort -n | tail -1 || true)
           next="v1.0.$(( ${last:-0} + 1 ))"

@@ -192,7 +192,8 @@ the new version, checks `/healthz` and a real lookup, and switches back to the p
 those checks fail. It reads every name and address from repository variables (listed at the top of the
 workflow), so the repository holds none.
 
-The web app needs `WEBSITES_PORT=8080`, the health check path `/healthz`, and the settings above
+The web app must run a single container (not Azure's sidecar mode), pull from the registry with its
+managed identity, and have `WEBSITES_PORT=8080`, the health check path `/healthz`, and the settings above
 (`Tools__IspChecker__AllowedOrigins`, `Tools__IspChecker__TrustedProxies`).
 
 ## Repository layout
