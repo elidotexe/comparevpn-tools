@@ -487,3 +487,6 @@ data/*
 
 # Private planning and keyword research (kept locally, never published)
 docs/
+
+# Saved API responses used while developing (may contain real addresses, never published)
+api-samples/
