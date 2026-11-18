@@ -109,6 +109,10 @@ jobs:
           next="v1.0.$(( ${last:-0} + 1 ))"
           login_server=$(az acr show -n "$REGISTRY" --query loginServer -o tsv)
 
+          # The registry's address has a random part Azure adds to the name, which the AZURE_REGISTRY secret
+          # doesn't cover. Hide the whole address in the rest of this run's public log.
+          echo "::add-mask::$login_server"
+
           # linuxFxVersion looks like "DOCKER|<registry>/<image>:v1.0.4"; keep what follows "DOCKER|".
           echo "running_image=${running#DOCKER|}" >> "$GITHUB_OUTPUT"
           echo "next=$next" >> "$GITHUB_OUTPUT"
