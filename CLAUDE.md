@@ -66,8 +66,8 @@ This applies to every session: local, Remote Control from the phone, and cloud s
 - Only the owner deploys, by pressing **Actions → Deploy → Run workflow** (`.github/workflows/deploy.yml`). It
   builds the `Dockerfile` in Azure as the next image `v1.0.N` (registry tags, not git tags), switches the web app,
   waits for `/version.txt`, smoke-tests `/healthz` and a lookup, and switches back if that fails. Never run `az`
-  commands that change production. All Azure names come from repository variables: never write them into the
-  workflow or any tracked file.
+  commands that change production. All Azure names and IDs come from repository secrets (not variables, which
+  show in the public run logs): never write them into the workflow, any tracked file or a log line.
 - The dataset is not part of the build output. The container image downloads a copy while it is built and
   refreshes it every `DATASET_REFRESH_INTERVAL` (`scripts/docker-entrypoint.sh`); servers without Docker
   refresh it with `scripts/download-data.sh` (e.g. a daily job). The app picks up the new file without a restart.

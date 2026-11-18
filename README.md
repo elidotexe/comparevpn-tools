@@ -189,8 +189,9 @@ the app itself never logs visitors' IPs, and its host shouldn't either.
 self-hosters. Pressing **Run workflow** on `master` runs the tests, has Azure Container Registry build
 the image as the next `v1.0.N`, switches an App Service web app to it, waits for `/version.txt` to show
 the new version, checks `/healthz` and a real lookup, and switches back to the previous image if
-those checks fail. It reads every name and address from repository variables (listed at the top of the
-workflow), so the repository holds none.
+those checks fail. It reads every name and address from repository settings (listed at the top of the
+workflow), so the repository holds none. The Azure names and IDs are repository secrets rather than
+variables, so they stay hidden in the run logs, which are public on a public repository.
 
 The web app must run a single container (not Azure's sidecar mode), pull from the registry with its
 managed identity, and have `WEBSITES_PORT=8080`, the health check path `/healthz`, and the settings above
