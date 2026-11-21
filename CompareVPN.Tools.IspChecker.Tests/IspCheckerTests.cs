@@ -175,6 +175,99 @@ public class IspCheckerTests
         Assert.That(answer.Outcome, Is.EqualTo(IspCheckOutcome.Checked));
     }
 
+    [Test]
+    public async Task CheckAsync_AddsLocationRoundedToTwoDecimals_ForPublicAddress()
+    {
+        var address = IPAddress.Parse("73.1.2.3");
+        var locations = new Mock<ILocationDataSource>();
+        locations.Setup(l => l.FindAsync(address, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new IpLocation("Plant City", "Florida", "US", 28.0186, -82.1129));
+
+        var result = await CheckAsync(new IspChecker(NetworkSource(Comcast).Object, locations.Object), address);
+
+        Assert.That(result.Location, Is.EqualTo(new IpLocation("Plant City", "Florida", "US", 28.02, -82.11)));
+    }
+
+    [Test]
+    public async Task CheckAsync_AddsLocation_EvenWhenTheNetworkIsUnknown()
+    {
+        var networks = new Mock<IAsnDataSource>();
+        networks.Setup(s => s.FindAsync(It.IsAny<IPAddress>(), It.IsAny<CancellationToken>())).ReturnsAsync(AsnSearchResult.NotInDataset(UpdatedAt));
+        var locations = new Mock<ILocationDataSource>();
+        locations.Setup(l => l.FindAsync(It.IsAny<IPAddress>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new IpLocation(null, null, "GB", null, null));
+
+        var result = await CheckAsync(new IspChecker(networks.Object, locations.Object), IPAddress.Parse("81.2.69.160"));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(result.Network, Is.Null);
+            Assert.That(result.Location, Is.EqualTo(new IpLocation(null, null, "GB", null, null)));
+        });
+    }
+
+    [Test]
+    public async Task CheckAsync_LooksUpLocationForTheTidiedAddress()
+    {
+        var locations = new Mock<ILocationDataSource>();
+        locations.Setup(l => l.FindAsync(IPAddress.Parse("1.1.1.1"), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new IpLocation("Sydney", "New South Wales", "AU", -33.8688, 151.209));
+
+        var result = await CheckAsync(new IspChecker(NetworkSource(Cloudflare).Object, locations.Object), IPAddress.Parse("::ffff:1.1.1.1"));
+
+        Assert.That(result.Location?.City, Is.EqualTo("Sydney"));
+    }
+
+    [Test]
+    public async Task CheckAsync_HasNoLocation_WhenTheLocationListDoesNotKnowTheAddress()
+    {
+        var locations = new Mock<ILocationDataSource>();
+        locations.Setup(l => l.FindAsync(It.IsAny<IPAddress>(), It.IsAny<CancellationToken>())).ReturnsAsync((IpLocation?)null);
+
+        var result = await CheckAsync(new IspChecker(NetworkSource(Comcast).Object, locations.Object), IPAddress.Parse("73.1.2.3"));
+
+        Assert.That(result.Location, Is.Null);
+    }
+
+    [Test]
+    public async Task CheckAsync_HasNoLocation_WithoutALocationSource()
+    {
+        var result = await CheckAsync(new IspChecker(NetworkSource(Comcast).Object), IPAddress.Parse("73.1.2.3"));
+
+        Assert.That(result.Location, Is.Null);
+    }
+
+    [Test]
+    public async Task CheckAsync_DoesNotLookUpLocation_ForPrivateAddress()
+    {
+        var locations = new Mock<ILocationDataSource>(MockBehavior.Strict);
+
+        var result = await CheckAsync(new IspChecker(new Mock<IAsnDataSource>(MockBehavior.Strict).Object, locations.Object), IPAddress.Parse("192.168.1.1"));
+
+        Assert.That(result.Location, Is.Null);
+    }
+
+    [Test]
+    public async Task CheckAsync_ReportsDataNotAvailable_EvenWhenALocationIsKnown()
+    {
+        var networks = new Mock<IAsnDataSource>();
+        networks.Setup(s => s.FindAsync(It.IsAny<IPAddress>(), It.IsAny<CancellationToken>())).ReturnsAsync(AsnSearchResult.DataNotAvailable());
+        var locations = new Mock<ILocationDataSource>();
+        locations.Setup(l => l.FindAsync(It.IsAny<IPAddress>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new IpLocation("Plant City", "Florida", "US", 28.0186, -82.1129));
+
+        var answer = await new IspChecker(networks.Object, locations.Object).CheckAsync(IPAddress.Parse("73.1.2.3"));
+
+        Assert.That(answer.Outcome, Is.EqualTo(IspCheckOutcome.DataNotAvailable));
+    }
+
+    private static Mock<IAsnDataSource> NetworkSource(AsnLookup match)
+    {
+        var source = new Mock<IAsnDataSource>();
+        source.Setup(s => s.FindAsync(It.IsAny<IPAddress>(), It.IsAny<CancellationToken>())).ReturnsAsync(AsnSearchResult.Found(match, UpdatedAt));
+        return source;
+    }
+
     /// <summary>Checks an address and returns the result, after confirming the checker could answer.</summary>
     private static async Task<IspCheckResult> CheckAsync(IspChecker checker, IPAddress address)
     {

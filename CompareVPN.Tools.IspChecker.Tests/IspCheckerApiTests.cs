@@ -25,6 +25,7 @@ public class IspCheckerApiTests
 
     private string _directory = null!;
     private string _datasetPath = null!;
+    private string _locationPath = null!;
 
     [SetUp]
     public void SetUp()
@@ -32,6 +33,9 @@ public class IspCheckerApiTests
         _directory = Directory.CreateTempSubdirectory("ispchecker-api-tests").FullName;
         _datasetPath = Path.Combine(_directory, "ip2asn-combined.tsv");
         File.WriteAllText(_datasetPath, Dataset);
+
+        // Not written unless a test needs it, so the tests never pick up a real location file on this computer.
+        _locationPath = Path.Combine(_directory, "dbip-city-lite.mmdb");
     }
 
     [TearDown]
@@ -62,6 +66,65 @@ public class IspCheckerApiTests
             Assert.That(network.GetProperty("isHosting").GetBoolean(), Is.False);
             Assert.That(body.GetProperty("dataUpdatedAt").ValueKind, Is.EqualTo(JsonValueKind.String));
         });
+    }
+
+    [Test]
+    public async Task Lookup_IncludesLocation_WhenTheLocationFileIsThere()
+    {
+        TestLocationFile.Write(_locationPath, ("73.1.0.0/16", TestLocationFile.Place("Plant City", "Florida", "US", 28.0186, -82.1129)));
+        using var app = StartApp();
+
+        var body = await ReadJsonOnceLocationIsLoaded(app, "/api/tools/isp/73.1.2.3");
+
+        var location = body.GetProperty("location");
+        Assert.Multiple(() =>
+        {
+            Assert.That(location.GetProperty("city").GetString(), Is.EqualTo("Plant City"));
+            Assert.That(location.GetProperty("region").GetString(), Is.EqualTo("Florida"));
+            Assert.That(location.GetProperty("countryCode").GetString(), Is.EqualTo("US"));
+            Assert.That(location.GetProperty("latitude").GetDouble(), Is.EqualTo(28.02));
+            Assert.That(location.GetProperty("longitude").GetDouble(), Is.EqualTo(-82.11));
+            Assert.That(body.GetProperty("network").GetProperty("asn").GetInt32(), Is.EqualTo(7922));
+        });
+    }
+
+    [Test]
+    public async Task Lookup_AnswersWithNullLocation_WhenTheLocationFileIsMissing()
+    {
+        using var app = StartApp();
+
+        var response = await app.CreateClient().GetAsync("/api/tools/isp/73.1.2.3");
+        var body = await ReadJson(response);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
+            Assert.That(body.GetProperty("location").ValueKind, Is.EqualTo(JsonValueKind.Null));
+            Assert.That(body.GetProperty("network").GetProperty("asn").GetInt32(), Is.EqualTo(7922));
+        });
+    }
+
+    [Test]
+    public async Task Lookup_AnswersWithNullLocation_WhenLocationIsTurnedOff()
+    {
+        TestLocationFile.Write(_locationPath, ("73.1.0.0/16", TestLocationFile.Place("Plant City", "Florida", "US", 28.0186, -82.1129)));
+        using var app = StartApp(("LocationDataFilePath", ""));
+
+        var body = await ReadJson(await app.CreateClient().GetAsync("/api/tools/isp/73.1.2.3"));
+
+        Assert.That(body.GetProperty("location").ValueKind, Is.EqualTo(JsonValueKind.Null));
+    }
+
+    [Test]
+    public async Task Health_StaysHealthy_WithoutTheLocationFile()
+    {
+        using var app = StartApp();
+        var client = app.CreateClient();
+        await client.GetAsync("/api/tools/isp/73.1.2.3"); // Loads the list of networks.
+
+        var response = await client.GetAsync("/healthz");
+
+        Assert.That(response.StatusCode, Is.EqualTo(HttpStatusCode.OK));
     }
 
     [Test]
@@ -379,6 +442,7 @@ public class IspCheckerApiTests
         var values = new Dictionary<string, string?>
         {
             ["Tools:IspChecker:DataFilePath"] = _datasetPath,
+            ["Tools:IspChecker:LocationDataFilePath"] = _locationPath,
             ["Tools:IspChecker:ReloadCheckInterval"] = "00:00:00",
         };
         foreach (var (name, value) in settings)
@@ -401,6 +465,26 @@ public class IspCheckerApiTests
         if (forwardedFor is not null) request.Headers.Add("X-Forwarded-For", forwardedFor);
         if (origin is not null) request.Headers.Add("Origin", origin);
         return app.CreateClient().SendAsync(request);
+    }
+
+    /// <summary>
+    /// The location file is opened in the background after start-up, so ask until the answer has a location (or give
+    /// up after a few seconds and return the last answer).
+    /// </summary>
+    private static async Task<JsonElement> ReadJsonOnceLocationIsLoaded(WebApplicationFactory<Program> app, string path)
+    {
+        var client = app.CreateClient();
+        var deadline = DateTime.UtcNow.AddSeconds(5);
+        while (true)
+        {
+            var body = await ReadJson(await client.GetAsync(path));
+            if (body.GetProperty("location").ValueKind != JsonValueKind.Null || DateTime.UtcNow > deadline)
+            {
+                return body;
+            }
+
+            await Task.Delay(50);
+        }
     }
 
     private static async Task<JsonElement> ReadJson(HttpResponseMessage response) =>

@@ -17,11 +17,12 @@ namespace CompareVPN.Tools.IspChecker.AspNetCore;
 ///
 /// In plain terms, here is what happens:
 ///   1. It reads the <c>Tools:IspChecker</c> settings and has them checked at start-up.
-///   2. It adds the list of networks (read from the file in <c>DataFilePath</c>) and the checker that uses it.
+///   2. It adds the list of networks (read from the file in <c>DataFilePath</c>), the optional location list (from
+///      <c>LocationDataFilePath</c>) and the checker that uses them.
 ///   3. It tells the website which servers in front of it may pass on the visitor's real address.
 ///   4. It lets the websites in <c>AllowedOrigins</c> call the API from a visitor's browser.
 ///   5. It limits how many typed-address lookups each visitor can make per minute.
-///   6. It adds the background job that loads and reloads the file, and the <c>/healthz</c> check.
+///   6. It adds the background job that loads and reloads the files, and the <c>/healthz</c> check.
 /// </summary>
 public static class IspCheckerServiceCollectionExtensions
 {
@@ -35,7 +36,7 @@ public static class IspCheckerServiceCollectionExtensions
         // Step 1: Settings.
         services.AddValidatedOptions(configuration);
 
-        // Step 2: The list of networks and the checker.
+        // Step 2: The list of networks, the location list and the checker.
         services.AddLookup();
 
         // Step 3: Trusted proxies.
@@ -47,7 +48,7 @@ public static class IspCheckerServiceCollectionExtensions
         // Step 5: The lookup limit.
         services.AddRateLimiting();
 
-        // Step 6: Loading the file in the background, and the health check.
+        // Step 6: Loading the files in the background, and the health check.
         services.AddHostedService<IspCheckerDatasetService>();
         services.AddHealthChecks().AddCheck<IspCheckerHealthCheck>("isp-dataset");
 
@@ -75,19 +76,30 @@ public static class IspCheckerServiceCollectionExtensions
             string.IsNullOrWhiteSpace(scalar) ? values : [.. values, scalar];
     }
 
-    /// <summary>Step 2: The file-based list of networks, and the checker that uses it.</summary>
+    /// <summary>Step 2: The file-based list of networks, the optional location list, and the checker that uses them.</summary>
     private static void AddLookup(this IServiceCollection services)
     {
         services.TryAddSingleton(TimeProvider.System);
 
-        // A relative DataFilePath starts from the app's folder.
+        // Relative file paths start from the app's folder.
         services.AddSingleton<IAsnDataSource>(sp =>
         {
             var options = sp.GetRequiredService<IOptions<IspCheckerOptions>>().Value;
-            var contentRoot = sp.GetRequiredService<IHostEnvironment>().ContentRootPath;
-            return new IpToAsnFileDataSource(Path.GetFullPath(options.DataFilePath, contentRoot));
+            return new IpToAsnFileDataSource(FullPath(sp, options.DataFilePath));
+        });
+
+        // An empty LocationDataFilePath turns location off.
+        services.AddSingleton<ILocationDataSource>(sp =>
+        {
+            var options = sp.GetRequiredService<IOptions<IspCheckerOptions>>().Value;
+            return string.IsNullOrWhiteSpace(options.LocationDataFilePath)
+                ? new NoLocationData()
+                : new DbIpCityFileDataSource(FullPath(sp, options.LocationDataFilePath));
         });
         services.AddSingleton<IspChecker>();
+
+        static string FullPath(IServiceProvider sp, string path) =>
+            Path.GetFullPath(path, sp.GetRequiredService<IHostEnvironment>().ContentRootPath);
     }
 
     /// <summary>

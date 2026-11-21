@@ -13,6 +13,13 @@ public sealed class IspCheckerOptions
     /// </summary>
     public string DataFilePath { get; set; } = "data/ip2asn-combined.tsv.gz";
 
+    /// <summary>
+    /// Where the DB-IP "IP to City Lite" file (<c>dbip-city-lite.mmdb</c>) is, for the approximate location in each
+    /// answer. A relative path starts from the app's folder. Empty turns location off. When the file isn't there,
+    /// lookups still work, just without a location.
+    /// </summary>
+    public string LocationDataFilePath { get; set; } = "data/dbip-city-lite.mmdb";
+
     /// <summary>How many typed-address lookups (<c>GET {pattern}/{ip}</c>) each visitor may make per minute.</summary>
     public int LookupRequestsPerMinute { get; set; } = 30;
 

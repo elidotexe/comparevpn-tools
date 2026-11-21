@@ -1,6 +1,7 @@
 # CompareVPN.ISPLookup
 
-Who is your ISP? Find the internet provider, network (ASN), and country behind your IP address.
+Who is your ISP? Find the internet provider, network (ASN), country and approximate location behind your IP
+address.
 An open-source tool for the [CompareVPN](https://comparevpn.co) website, which you can inspect or self-host.
 
 The solution contains one ASP.NET Core application, `CompareVPN.ISPLookup`.
@@ -8,7 +9,9 @@ The repository and solution keep the broader CompareVPN Tools name for future to
 
 ## Privacy
 
-- ISP lookups run locally against the public-domain [iptoasn.com](https://iptoasn.com) dataset.
+- ISP lookups run locally against the public-domain [iptoasn.com](https://iptoasn.com) dataset, and the
+  optional location against the [DB-IP](https://db-ip.com) "IP to City Lite" file. No address is sent to
+  another service.
 - IP addresses are never logged or stored, and lookup responses use `Cache-Control: no-store`.
 
 ## Run locally
@@ -24,7 +27,8 @@ dotnet run --project CompareVPN.ISPLookup
 Local requests show a private address such as `::1`. Deploy behind a public IP or configure
 trusted reverse proxies to see the visitor's ISP.
 
-In development the app reads `../data/ip2asn-combined.tsv.gz` (set in `appsettings.Development.json`).
+In development the app reads `../data/ip2asn-combined.tsv.gz` and `../data/dbip-city-lite.mmdb` (set in
+`appsettings.Development.json`).
 
 ## API
 
@@ -46,7 +50,14 @@ In development the app reads `../data/ip2asn-combined.tsv.gz` (set in `appsettin
     "range": { "start": "73.0.0.0", "end": "73.255.255.255" },
     "isHosting": false
   },
-  "dataUpdatedAt": "2026-11-04T21:46:11+00:00"
+  "dataUpdatedAt": "2026-11-04T21:46:11+00:00",
+  "location": {
+    "city": "Plant City",
+    "region": "Florida",
+    "countryCode": "US",
+    "latitude": 28.02,
+    "longitude": -82.11
+  }
 }
 ```
 
@@ -55,7 +66,15 @@ In development the app reads `../data/ip2asn-combined.tsv.gz` (set in `appsettin
 - `isHosting` is true for known cloud / datacenter / VPN-provider networks (`Tools/IspChecker/HostingNetworks.cs`).
   It is conservative: `false` does not prove an address is residential.
 - `network` is `null` for private addresses (`isPublic: false`) and for public addresses not in the dataset.
-- Invalid input returns `400`, a missing dataset returns `503`.
+- `location` is roughly where the address is, from the DB-IP file: the country is usually right, the city is
+  often the provider's nearest hub, and the coordinates are the city's centre, rounded to 2 decimals (about
+  1 km). It is never a street address. Any part the file doesn't know is `null`, and `location` itself is `null`
+  for private addresses, addresses not in the file, or when the file isn't loaded or location is turned off.
+  `dataUpdatedAt` refers to the network dataset only.
+- Invalid input returns `400`, a missing network dataset returns `503`. A missing location file doesn't fail
+  lookups; they just have no `location`.
+- **If you show `location` on a web page, you must link to DB-IP** (the file's licence, CC BY 4.0), e.g.
+  `<a href="https://db-ip.com">IP Geolocation by DB-IP</a>`.
 
 ## Configuration
 
@@ -67,9 +86,10 @@ Invalid values stop the app at startup with a message naming the bad entry.
 | Setting | Default | Description |
 |---|---|---|
 | `DataFilePath` | `data/ip2asn-combined.tsv.gz` | Dataset path; relative paths resolve against the content root. Use an absolute path in production. |
+| `LocationDataFilePath` | `data/dbip-city-lite.mmdb` | DB-IP "IP to City Lite" file (MMDB format) for `location`. Empty turns location off. A missing file only leaves `location` out. MaxMind's GeoLite2 City file uses the same layout and works too. |
 | `TrustedProxies` | *(empty: loopback only)* | Reverse proxies allowed to set `X-Forwarded-For`, as IPs or CIDRs, e.g. `172.18.0.0/16`. Replaces the loopback default when set. |
 | `AllowedOrigins` | *(empty: CORS off)* | Sites whose browser JavaScript may call the API, e.g. `https://comparevpn.co`. Supports `https://*.example.com` and `*`. |
-| `ReloadCheckInterval` | `00:01:00` | How often to check the dataset file for changes. `00:00:00` disables reloading. |
+| `ReloadCheckInterval` | `00:01:00` | How often to check the dataset files for changes. `00:00:00` disables reloading. |
 | `MaxDataAge` | `3.00:00:00` | Older data makes `/healthz` report `Degraded`. |
 | `LookupRequestsPerMinute` | `30` | Per-client limit for `GET /api/tools/isp/{ip}`. |
 
@@ -142,8 +162,14 @@ events, so it also works on Docker Desktop bind mounts, NFS and Kubernetes volum
 If the file is missing at startup the app still starts, logs a warning with the path it tried,
 returns `503` from the API and picks the file up as soon as it appears.
 
-Memory: about 200 MB with the dataset loaded, peaking around 300 MB while a reload holds both
-copies. A container limit of 384 MB leaves enough headroom.
+The location file (`LocationDataFilePath`) is checked and swapped in the same way. Without it the API
+answers normally with `"location": null`, and logs one warning with the path it tried; set
+`LocationDataFilePath` to an empty value to turn location off and silence that warning.
+
+Memory: about 200 MB with the network dataset loaded, peaking around 300 MB while a reload holds both
+copies. The location file (about 130 MB) is opened as it is rather than loaded into lists, so its pages are
+shared with the operating system's file cache and only the parts used are read in. A container limit of
+384 MB leaves enough headroom.
 
 ### Health check
 
@@ -151,7 +177,7 @@ copies. A container limit of 384 MB leaves enough headroom.
 
 | Status | HTTP | Meaning |
 |---|---|---|
-| `Healthy` | 200 | Dataset loaded and fresh |
+| `Healthy` | 200 | Dataset loaded and fresh (the optional location file doesn't affect health) |
 | `Degraded` | 200 | Dataset loaded but older than `MaxDataAge`: the refresh job is probably failing |
 | `Unhealthy` | 503 | Dataset not loaded yet; lookups would return `503` |
 
@@ -207,7 +233,7 @@ CompareVPN.Tools.IspChecker.Tests/  Standalone test project
 .github/workflows/                 CI, release artifact, and the optional Azure deploy
 scripts/                           Dataset download helper and the container's start script
 Dockerfile                         Container image (app + dataset + daily refresh)
-data/                              Local ASN dataset
+data/                              Local datasets (network list and location file; never committed)
 ```
 
 Keep ISP lookup features in this application. Future tools can be added to the repository
@@ -227,3 +253,9 @@ artifact instead of NuGet packages.
 ## License
 
 [MIT](LICENSE). The iptoasn.com dataset is released under the PDDL (public domain).
+
+The location data is the "IP to City Lite" file by [DB-IP](https://db-ip.com), licensed under
+[Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/). It may be used in any
+application, including commercially, as long as DB-IP is credited; web pages that show or use its results
+must link to https://db-ip.com. The file is downloaded, never committed. It is read with the
+[MaxMind.Db](https://github.com/maxmind/MaxMind-DB-Reader-dotnet) package (Apache 2.0).

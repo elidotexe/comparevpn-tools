@@ -19,14 +19,21 @@ namespace CompareVPN.Tools.IspChecker.AspNetCore;
 /// </summary>
 internal sealed class IspCheckerDatasetService(
     IAsnDataSource dataSource,
+    ILocationDataSource locationSource,
     IOptions<IspCheckerOptions> options,
     TimeProvider timeProvider,
     ILogger<IspCheckerDatasetService> logger) : BackgroundService
 {
     // A data source that isn't a reloadable file looks after its own loading, so it isn't watched here.
-    private readonly WatchedDataFile[] _files = dataSource is IReloadableAsnDataSource networks
-        ? [new WatchedDataFile(networks, "ISP dataset", "lookups return 503 until it is available")]
-        : [];
+    private readonly WatchedDataFile[] _files =
+    [
+        .. dataSource is IReloadableAsnDataSource networks
+            ? [new WatchedDataFile(networks, "ISP dataset", "lookups return 503 until it is available")]
+            : Array.Empty<WatchedDataFile>(),
+        .. locationSource is IReloadableDataFile locations
+            ? [new WatchedDataFile(locations, "Location dataset", "lookups answer without a location")]
+            : Array.Empty<WatchedDataFile>(),
+    ];
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {

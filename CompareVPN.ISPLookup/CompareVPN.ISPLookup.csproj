@@ -4,6 +4,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="MaxMind.Db" />
+  </ItemGroup>
+
+  <ItemGroup>
     <InternalsVisibleTo Include="CompareVPN.Tools.IspChecker.Tests" />
   </ItemGroup>
 </Project>
