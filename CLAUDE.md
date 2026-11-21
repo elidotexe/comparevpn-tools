@@ -6,8 +6,9 @@ visitor's browser. Anyone can read, run or self-host this code, so it is written
 have never seen the CompareVPN site.
 
 - `CompareVPN.ISPLookup/`: the app (ASP.NET Core minimal API, .NET 10, no database). Each tool lives in its own
-  folder under `Tools/` (now only `Tools/IspChecker/`). `wwwroot/index.html` is a small demo page, not the
-  production page.
+  folder under `Tools/` (now only `Tools/IspChecker/`); what tools share sits beside it in `Data/`, `Addresses/`
+  and `Web/` (see "How the code is organised"). `wwwroot/index.html` is a small demo page, not the production
+  page.
 - `CompareVPN.Tools.IspChecker.Tests/`: NUnit + Moq tests. They are kept out of `CompareVPN.Tools.slnx` on
   purpose, so run them by path.
 - Build: `dotnet build` (from repo root). `TreatWarningsAsErrors` is on, so a warning fails the build.
@@ -85,24 +86,43 @@ This applies to every session: local, Remote Control from the phone, and cloud s
 
 ## How the code is organised
 
+The app has one folder per tool, and folders for what tools share. Each folder is its own namespace
+(`CompareVPN.<Folder>`, e.g. `CompareVPN.Data.Networks`):
+
+```
+CompareVPN.ISPLookup/
+  Addresses/        Reading and classifying IP addresses (private or public, typed input)
+  Data/             Downloaded data files that reload while the app runs
+    Networks/       Which network owns an address (iptoasn.com), the hosting list, tidy provider names
+    Location/       Roughly where an address is (DB-IP City Lite)
+  Web/              Reading web settings: allowed websites (CORS) and trusted proxies
+  Tools/
+    IspChecker/     The ISP checker: its rules, answer types, and AspNetCore/ (endpoints and set-up)
+```
+
+Put code in `Data/`, `Addresses/` or `Web/` when it is about addresses, datasets or web settings in general,
+even if only one tool uses it today; keep in `Tools/<Tool>/` what only makes sense for that tool (its answer,
+its rules, its endpoints and settings). Tools may use the shared folders, but a shared folder never uses a tool.
+
 Each tool follows the same split, which matches controller → service → repository on the main site:
 
 - **Endpoints** (`Tools/<Tool>/AspNetCore/...EndpointRouteBuilderExtensions.cs`): like a controller, they only
   handle the web request: reading the address or input, choosing the status code, response headers
   (`no-store`) and problem responses. No lookup rules here.
-- **The tool itself** (e.g. `IspChecker`): like a service, it holds the rules: which addresses count as private,
-  how names are cleaned up, which networks count as hosting. It knows nothing about web requests, so it can be
-  tested directly.
-- **Data sources** (e.g. `IAsnDataSource`, `IpToAsnFileDataSource`): like a repository, they find records in the
-  dataset and nothing else.
+- **The tool itself** (e.g. `IspChecker`): like a service, it holds the tool's rules and puts the answer
+  together from the shared pieces (address checks, data sources, the hosting list, name tidying). It knows
+  nothing about web requests, so it can be tested directly.
+- **Data sources** (in `Data/`, e.g. `IAsnDataSource`, `IpToAsnFileDataSource`, `DbIpCityFileDataSource`): like
+  a repository, they find records in a dataset and nothing else.
 - **Set-up** (`...ServiceCollectionExtensions.cs`, `...Options.cs`, `...OptionsValidator.cs`): registers the
   tool, reads and checks its settings, and adds what it needs (rate limiting, CORS, trusted proxies, health
   check, background reloading). `Program.cs` stays a short list of these calls.
 - **A new tool** gets its own folder `Tools/<Tool>/` with the same split, its own settings section
   `Tools:<Tool>`, endpoints under `/api/tools/<tool>`, its own test project
-  `CompareVPN.Tools.<Tool>.Tests` (added to both workflows), and its own README section. Share code between
-  tools only once two tools actually need it. Don't create separate libraries unless code has to be
-  distributed on its own.
+  `CompareVPN.Tools.<Tool>.Tests` (added to both workflows), and its own README section. It uses `Data/`,
+  `Addresses/` and `Web/` rather than copying from another tool. Set-up code (rate limiting, CORS, reloading
+  in `Tools/IspChecker/AspNetCore/`) moves to a shared place only once a second tool actually needs it. Don't
+  create separate libraries unless code has to be distributed on its own.
 - **The demo page** (`wwwroot/index.html`) stays a single file with no build step and no outside scripts or
   fonts. It shows that the API works; the real page with the guide and design lives on the CompareVPN site.
 
@@ -246,7 +266,8 @@ public sealed class IspChecker(IAsnDataSource dataSource)
 }
 ```
 
-Reference files already in this style: `AspNetCore/IspCheckerEndpointRouteBuilderExtensions.cs` (endpoints),
-`IspChecker.cs` (the tool, the full version of the example above), `IpToAsnFileDataSource.cs` (a data source) and
-`AspNetCore/IspCheckerDatasetService.cs` (background work), all under `CompareVPN.ISPLookup/Tools/IspChecker/`.
+Reference files already in this style, under `CompareVPN.ISPLookup/`:
+`Tools/IspChecker/AspNetCore/IspCheckerEndpointRouteBuilderExtensions.cs` (endpoints), `Tools/IspChecker/IspChecker.cs`
+(the tool, the full version of the example above), `Data/Networks/IpToAsnFileDataSource.cs` (a data source) and
+`Tools/IspChecker/AspNetCore/IspCheckerDatasetService.cs` (background work).
 Outcomes are reported as in `AsnSearchResult` / `IspCheckAnswer`: an enum plus a record with small factory methods.

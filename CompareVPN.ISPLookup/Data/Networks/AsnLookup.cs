@@ -1,6 +1,6 @@
 using System.Net;
 
-namespace CompareVPN.Tools.IspChecker;
+namespace CompareVPN.Data.Networks;
 
 /// <summary>A match in the list of networks: the network that owns the address, and the block the address is in.</summary>
 /// <param name="Network">The network (autonomous system) that announces the block.</param>

@@ -1,4 +1,4 @@
-namespace CompareVPN.Tools.IspChecker;
+namespace CompareVPN.Data;
 
 /// <summary>
 /// A downloaded data file that can be replaced while the website runs. The background reload job checks each one

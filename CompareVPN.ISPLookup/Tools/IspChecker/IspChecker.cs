@@ -1,5 +1,8 @@
-using System.Net;
 using System.Net.Sockets;
+using System.Net;
+using CompareVPN.Addresses;
+using CompareVPN.Data.Location;
+using CompareVPN.Data.Networks;
 
 namespace CompareVPN.Tools.IspChecker;
 

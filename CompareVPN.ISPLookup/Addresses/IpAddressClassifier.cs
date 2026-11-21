@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Sockets;
 
-namespace CompareVPN.Tools.IspChecker;
+namespace CompareVPN.Addresses;
 
 /// <summary>
 /// This class recognises addresses that never belong to an internet provider's customer: home and office networks,

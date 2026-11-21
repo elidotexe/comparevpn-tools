@@ -1,6 +1,6 @@
 using System.Diagnostics.CodeAnalysis;
 
-namespace CompareVPN.Tools.IspChecker;
+namespace CompareVPN.Web;
 
 /// <summary>
 /// This class reads the <c>AllowedOrigins</c> setting: the websites whose pages may call the API from a visitor's

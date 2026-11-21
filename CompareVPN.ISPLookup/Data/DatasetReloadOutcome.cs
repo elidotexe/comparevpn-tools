@@ -1,4 +1,4 @@
-namespace CompareVPN.Tools.IspChecker;
+namespace CompareVPN.Data;
 
 /// <summary>What happened when a data source checked its file for a newer copy.</summary>
 public enum DatasetReloadOutcome

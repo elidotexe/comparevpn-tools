@@ -1,9 +1,9 @@
 using MaxMind.Db;
 
-namespace CompareVPN.Tools.IspChecker;
+namespace CompareVPN.Data.Location;
 
 /// <summary>
-/// The parts of one entry in the DB-IP location file that the ISP checker uses, named as they are in the file. The
+/// The parts of one entry in the DB-IP location file that the tools use, named as they are in the file. The
 /// file holds more (continent, names in other languages); those are skipped. MaxMind's GeoLite2 City file uses the
 /// same names, so it can be read the same way.
 /// </summary>

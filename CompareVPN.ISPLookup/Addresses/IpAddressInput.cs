@@ -1,7 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Net;
 
-namespace CompareVPN.Tools.IspChecker;
+namespace CompareVPN.Addresses;
 
 /// <summary>
 /// This class reads an address a visitor typed, and only accepts the ordinary ways of writing one.

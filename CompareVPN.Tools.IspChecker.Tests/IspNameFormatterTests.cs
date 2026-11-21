@@ -1,3 +1,5 @@
+using CompareVPN.Data.Networks;
+
 namespace CompareVPN.Tools.IspChecker.Tests;
 
 [TestFixture]

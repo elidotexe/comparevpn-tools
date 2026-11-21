@@ -1,4 +1,4 @@
-namespace CompareVPN.Tools.IspChecker;
+namespace CompareVPN.Data.Networks;
 
 /// <summary>
 /// This class is a hand-kept list of networks that rent out servers (cloud, datacenter and delivery companies, and the
@@ -6,7 +6,7 @@ namespace CompareVPN.Tools.IspChecker;
 /// whose address belongs to one of them is very likely using a VPN, proxy or relay.
 ///
 /// In plain terms, here is what happens:
-///   1. The ISP checker asks whether a network's number is on the list.
+///   1. A tool (such as the ISP checker) asks whether a network's number is on the list.
 ///   2. The answer becomes the "isHosting" flag the visitor sees.
 ///   The list is careful rather than complete: a network that isn't on it is not proof of a home connection.
 ///   Each entry was checked against the network's name in the iptoasn.com list.

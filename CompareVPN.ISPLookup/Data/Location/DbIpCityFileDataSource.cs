@@ -1,10 +1,11 @@
 using System.Net;
+using CompareVPN.Data;
 using MaxMind.Db;
 
-namespace CompareVPN.Tools.IspChecker;
+namespace CompareVPN.Data.Location;
 
 /// <summary>
-/// This class is the ISP checker's atlas. It reads the free "IP to City Lite" file from
+/// This class is the tools' atlas. It reads the free "IP to City Lite" file from
 /// <see href="https://db-ip.com">DB-IP</see> and finds roughly where an address is: city, region, country and the
 /// city's coordinates. Everything happens on this server, so no visitor's address is ever sent anywhere else.
 ///

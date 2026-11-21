@@ -1,3 +1,5 @@
+using CompareVPN.Data.Location;
+using CompareVPN.Data.Networks;
 using CompareVPN.Tools.IspChecker.AspNetCore;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;

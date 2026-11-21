@@ -1,4 +1,5 @@
 using System.Net;
+using CompareVPN.Data.Networks;
 using CompareVPN.Tools.IspChecker.AspNetCore;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;

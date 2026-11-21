@@ -1,4 +1,6 @@
 using System.Net;
+using CompareVPN.Data.Networks;
+using CompareVPN.Data;
 
 namespace CompareVPN.Tools.IspChecker.Tests;
 

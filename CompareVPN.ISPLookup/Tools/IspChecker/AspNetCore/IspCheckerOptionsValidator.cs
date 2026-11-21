@@ -1,3 +1,4 @@
+using CompareVPN.Web;
 using Microsoft.Extensions.Options;
 
 namespace CompareVPN.Tools.IspChecker.AspNetCore;

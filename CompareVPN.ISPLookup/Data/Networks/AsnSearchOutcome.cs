@@ -1,4 +1,4 @@
-namespace CompareVPN.Tools.IspChecker;
+namespace CompareVPN.Data.Networks;
 
 /// <summary>What happened when an address was looked up in the list of networks.</summary>
 public enum AsnSearchOutcome

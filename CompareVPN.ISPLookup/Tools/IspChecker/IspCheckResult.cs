@@ -1,3 +1,5 @@
+using CompareVPN.Data.Location;
+
 namespace CompareVPN.Tools.IspChecker;
 
 /// <summary>What the API sends back about one address. The field names are part of the public API.</summary>

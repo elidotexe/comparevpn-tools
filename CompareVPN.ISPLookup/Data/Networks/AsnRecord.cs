@@ -1,4 +1,4 @@
-namespace CompareVPN.Tools.IspChecker;
+namespace CompareVPN.Data.Networks;
 
 /// <summary>An autonomous system (network operator) that announces a block of IP addresses.</summary>
 /// <param name="Asn">Autonomous system number, e.g. 13335.</param>

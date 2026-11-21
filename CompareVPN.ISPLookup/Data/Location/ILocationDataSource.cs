@@ -1,6 +1,6 @@
 using System.Net;
 
-namespace CompareVPN.Tools.IspChecker;
+namespace CompareVPN.Data.Location;
 
 /// <summary>
 /// Finds roughly where an address is. Self-hosters can implement this to plug in another location list instead of

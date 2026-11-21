@@ -1,4 +1,4 @@
-namespace CompareVPN.Tools.IspChecker;
+namespace CompareVPN.Data.Networks;
 
 /// <summary>
 /// A data source's answer to "who owns this address?": what happened, the matching block of addresses when there

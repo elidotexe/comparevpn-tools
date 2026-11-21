@@ -1,8 +1,9 @@
 using System.Diagnostics.CodeAnalysis;
-using System.Net;
 using System.Net.Sockets;
+using System.Net;
+using CompareVPN.Addresses;
 
-namespace CompareVPN.Tools.IspChecker;
+namespace CompareVPN.Web;
 
 /// <summary>
 /// This class reads the <c>TrustedProxies</c> setting: the servers in front of the website (such as nginx or

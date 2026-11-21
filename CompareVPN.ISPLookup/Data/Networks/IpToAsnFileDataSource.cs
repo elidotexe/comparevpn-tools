@@ -3,11 +3,12 @@ using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.IO.Compression;
 using System.Net;
+using CompareVPN.Data;
 
-namespace CompareVPN.Tools.IspChecker;
+namespace CompareVPN.Data.Networks;
 
 /// <summary>
-/// This class is the ISP checker's phone book. It reads the free, public-domain list of networks from
+/// This class is the tools' phone book. It reads the free, public-domain list of networks from
 /// <see href="https://iptoasn.com">iptoasn.com</see> into memory and finds which network owns an address.
 /// Everything happens on this server, so no visitor's address is ever sent anywhere else.
 ///

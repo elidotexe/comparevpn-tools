@@ -1,4 +1,4 @@
-namespace CompareVPN.Tools.IspChecker;
+namespace CompareVPN.Data.Location;
 
 /// <summary>
 /// Roughly where an address is, ready to show to a visitor. This is an estimate from a downloaded list: the country is

@@ -1,3 +1,4 @@
+using CompareVPN.Data.Networks;
 using Microsoft.Extensions.Diagnostics.HealthChecks;
 using Microsoft.Extensions.Options;
 

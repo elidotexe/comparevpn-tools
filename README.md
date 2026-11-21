@@ -63,7 +63,7 @@ In development the app reads `../data/ip2asn-combined.tsv.gz` and `../data/dbip-
 
 - `name` is a cleaned, human-friendly name; `organization` is the raw dataset description.
 - `countryCode` is where the network is **registered**, not the visitor's location.
-- `isHosting` is true for known cloud / datacenter / VPN-provider networks (`Tools/IspChecker/HostingNetworks.cs`).
+- `isHosting` is true for known cloud / datacenter / VPN-provider networks (`Data/Networks/HostingNetworks.cs`).
   It is conservative: `false` does not prove an address is residential.
 - `network` is `null` for private addresses (`isPublic: false`) and for public addresses not in the dataset.
 - `location` is roughly where the address is, from the DB-IP file: the country is usually right, the city is
@@ -239,7 +239,11 @@ managed identity, and have `WEBSITES_PORT=8080`, the health check path `/healthz
 
 ```
 CompareVPN.ISPLookup/               Web application (the only project in the solution)
-  Tools/IspChecker/                 ISP lookup implementation and HTTP integration
+  Addresses/                        Reading and classifying IP addresses
+  Data/Networks/                    Network list (iptoasn.com), hosting list, provider-name tidying
+  Data/Location/                    Approximate location (DB-IP City Lite)
+  Web/                              Allowed websites (CORS) and trusted proxies settings
+  Tools/IspChecker/                 The ISP checker: rules, answer types, endpoints and set-up
   wwwroot/index.html                ISP lookup page
 CompareVPN.Tools.IspChecker.Tests/  Standalone test project
 .github/workflows/                 CI, release artifact, and the optional Azure deploy

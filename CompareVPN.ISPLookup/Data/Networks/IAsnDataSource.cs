@@ -1,6 +1,6 @@
 using System.Net;
 
-namespace CompareVPN.Tools.IspChecker;
+namespace CompareVPN.Data.Networks;
 
 /// <summary>
 /// Finds which network owns an address. Self-hosters can implement this to plug in another list of networks

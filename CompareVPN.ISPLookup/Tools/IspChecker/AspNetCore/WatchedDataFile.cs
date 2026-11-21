@@ -1,3 +1,5 @@
+using CompareVPN.Data;
+
 namespace CompareVPN.Tools.IspChecker.AspNetCore;
 
 /// <summary>

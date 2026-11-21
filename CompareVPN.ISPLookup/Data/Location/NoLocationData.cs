@@ -1,6 +1,6 @@
 using System.Net;
 
-namespace CompareVPN.Tools.IspChecker;
+namespace CompareVPN.Data.Location;
 
 /// <summary>Used when location is turned off (an empty <c>LocationDataFilePath</c>): every answer has no location.</summary>
 internal sealed class NoLocationData : ILocationDataSource
