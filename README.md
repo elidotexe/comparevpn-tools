@@ -19,10 +19,13 @@ The repository and solution keep the broader CompareVPN Tools name for future to
 Requires the [.NET 10 SDK](https://dotnet.microsoft.com/download).
 
 ```bash
-./scripts/download-data.sh
+./scripts/download-data.sh    # network list (~11 MB) and location file (~60 MB download)
 dotnet run --project CompareVPN.ISPLookup
 # open http://localhost:5180
 ```
+
+To skip the location file, run `SKIP_LOCATION_DATA=1 ./scripts/download-data.sh`; lookups then answer with
+`"location": null`.
 
 Local requests show a private address such as `::1`. Deploy behind a public IP or configure
 trusted reverse proxies to see the visitor's ISP.
@@ -34,8 +37,8 @@ In development the app reads `../data/ip2asn-combined.tsv.gz` and `../data/dbip-
 
 | Endpoint | Description |
 |---|---|
-| `GET /api/tools/isp` | The calling visitor's ISP |
-| `GET /api/tools/isp/{ip}` | Any IPv4 / IPv6 address. Rate limited per client (`LookupRequestsPerMinute`, default 30) → `429` |
+| `GET /api/tools/isp` | The calling visitor's ISP and approximate location |
+| `GET /api/tools/isp/{ip}` | The same for any IPv4 / IPv6 address. Rate limited per client (`LookupRequestsPerMinute`, default 30) → `429` |
 
 ```json
 {
