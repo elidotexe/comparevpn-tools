@@ -6,6 +6,8 @@ An open-source tool for the [CompareVPN](https://comparevpn.co) website, which y
 
 The solution contains one ASP.NET Core application, `CompareVPN.ISPLookup`.
 The repository and solution keep the broader CompareVPN Tools name for future tools.
+Tools that run entirely in the visitor's browser, such as the WebRTC leak test, keep their code in `web/`
+(see [Browser code](#browser-code-web)).
 
 ## Privacy
 
@@ -13,6 +15,9 @@ The repository and solution keep the broader CompareVPN Tools name for future to
   optional location against the [DB-IP](https://db-ip.com) "IP to City Lite" file. No address is sent to
   another service.
 - IP addresses are never logged or stored, and lookup responses use `Cache-Control: no-store`.
+- The WebRTC leak test runs in the browser. Like every WebRTC test, the browser asks an address server
+  (Cloudflare's public STUN server by default) for its public address, so that server sees it. See
+  [Browser code](#browser-code-web).
 
 ## Run locally
 
@@ -238,6 +243,44 @@ The web app must run a single container (not Azure's sidecar mode), pull from th
 managed identity, and have `WEBSITES_PORT=8080`, the health check path `/healthz`, and the settings above
 (`Tools__IspChecker__AllowedOrigins`, `Tools__IspChecker__TrustedProxies`).
 
+## Browser code (`web/`)
+
+Some tools run entirely in the visitor's browser, with no API endpoint. Their code lives in `web/` as plain
+TypeScript with no framework and no page markup, so any website can use it and anyone can check what it does.
+It is tested here; a website copies the files into its own build.
+
+### WebRTC leak test (`web/webrtc-leak-test/`)
+
+WebRTC is the browser feature behind video calls. To set up a call, the browser lists every address it can be
+reached on, and any website can ask for that list without a permission prompt. If a VPN doesn't cover WebRTC,
+the list can include the visitor's real address: a WebRTC leak.
+
+| File | What it does |
+|---|---|
+| `WebRtcProbe.ts` | Prepares a WebRTC connection that never connects (no camera or microphone) and collects the addresses the browser lists. Answers "unavailable" when WebRTC is turned off or blocked. |
+| `IceCandidate.ts` | Reads one address line from the browser and says whether the address is public, local, or hidden behind the browser's random `….local` name. |
+| `LeakVerdict.ts` | Compares the public addresses WebRTC revealed with the address websites see. A different address counts as a leak unless both belong to the same network (e.g. one provider's IPv4 and IPv6 addresses). |
+
+A page using it:
+
+1. Looks up the visitor's own address (e.g. with `GET /api/tools/isp`), which is what websites see.
+2. Runs `new WebRtcProbe().run()`.
+3. Looks up each address from `LeakVerdict.addressesToLookUp(seenAddress, probe)` (e.g. `GET /api/tools/isp/{ip}`).
+4. Calls `LeakVerdict.decide(seen, probe, lookups)`: `leak`, `no-leak` or `webrtc-blocked`, with the leaked
+   addresses, local addresses the browser shows openly, and whether the visitor's address looks like a VPN.
+
+**Privacy:** to learn its public address, the browser asks an address server (a "STUN server"), which sees the
+visitor's address, as with every WebRTC leak test. The probe uses Cloudflare's free public server
+(`stun:stun.cloudflare.com:3478`) unless you pass your own, e.g. `new WebRtcProbe(['stun:stun.example.org:3478'])`.
+Nothing else is sent anywhere by this code.
+
+```bash
+cd web
+npm ci
+npm run typecheck
+npm test
+```
+
 ## Repository layout
 
 ```
@@ -249,6 +292,8 @@ CompareVPN.ISPLookup/               Web application (the only project in the sol
   Tools/IspChecker/                 The ISP checker: rules, answer types, endpoints and set-up
   wwwroot/index.html                ISP lookup page
 CompareVPN.Tools.IspChecker.Tests/  Standalone test project
+web/                               Browser code for tools that run in the visitor's browser, with its tests
+  webrtc-leak-test/                The WebRTC leak test
 .github/workflows/                 CI, release artifact, and the optional Azure deploy
 scripts/                           Dataset download helper and the container's start script
 Dockerfile                         Container image (app + datasets + daily refresh)
@@ -266,12 +311,13 @@ dotnet test CompareVPN.Tools.IspChecker.Tests/CompareVPN.Tools.IspChecker.Tests.
 ```
 
 The tests are kept outside the application solution so it contains only the runnable project.
-CI runs the test project explicitly. Release tags such as `v0.1.0` build an application publish
+CI runs the test project explicitly, and the browser code's checks in `web/` (`npm run typecheck`,
+`npm test`). Release tags such as `v0.1.0` build an application publish
 artifact instead of NuGet packages.
 
 ## License
 
-[MIT](LICENSE). The iptoasn.com dataset is released under the PDDL (public domain).
+[MIT](LICENSE), including the browser code in `web/`. The iptoasn.com dataset is released under the PDDL (public domain).
 
 The location data is the "IP to City Lite" file by [DB-IP](https://db-ip.com), licensed under
 [Creative Commons Attribution 4.0](https://creativecommons.org/licenses/by/4.0/). It may be used in any

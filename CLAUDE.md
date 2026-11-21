@@ -9,6 +9,8 @@ have never seen the CompareVPN site.
   folder under `Tools/` (now only `Tools/IspChecker/`); what tools share sits beside it in `Data/`, `Addresses/`
   and `Web/` (see "How the code is organised"). `wwwroot/index.html` is a small demo page, not the production
   page.
+- `web/`: browser code for tools that run entirely in the visitor's browser (e.g. `web/webrtc-leak-test/`),
+  plain TypeScript with Vitest tests. Checks: `npm ci`, `npm run typecheck` and `npm test` in `web/`.
 - `CompareVPN.Tools.IspChecker.Tests/`: NUnit + Moq tests. They are kept out of `CompareVPN.Tools.slnx` on
   purpose, so run them by path.
 - Build: `dotnet build` (from repo root). `TreatWarningsAsErrors` is on, so a warning fails the build.
@@ -22,7 +24,8 @@ have never seen the CompareVPN site.
 - **Visitor privacy comes first.** IP addresses are never logged, stored or sent to another service. Lookups
   run against local data only. API responses use `Cache-Control: no-store`. Rate limiting may hold an address in
   memory as a key for the current window, nothing more. A change that breaks any of this is a bug, even if it
-  makes something easier.
+  makes something easier. The one exception is browser code that has to ask an outside server by design (the
+  WebRTC leak test's STUN server): the README names the server, and the caller can replace it.
 - **Nothing private goes into the repository**: no secrets, keys, connection strings, server names, internal
   business plans or traffic and affiliate figures. Settings that differ per server come from configuration
   (`Tools__IspChecker__<Name>` environment variables), with safe defaults in `appsettings.json`.
@@ -98,6 +101,8 @@ CompareVPN.ISPLookup/
   Web/              Reading web settings: allowed websites (CORS) and trusted proxies
   Tools/
     IspChecker/     The ISP checker: its rules, answer types, and AspNetCore/ (endpoints and set-up)
+web/                Browser code for tools that run in the visitor's browser (not part of the app)
+  webrtc-leak-test/ The WebRTC leak test
 ```
 
 Put code in `Data/`, `Addresses/` or `Web/` when it is about addresses, datasets or web settings in general,
@@ -123,6 +128,13 @@ Each tool follows the same split, which matches controller → service → repos
   `Addresses/` and `Web/` rather than copying from another tool. Set-up code (rate limiting, CORS, reloading
   in `Tools/IspChecker/AspNetCore/`) moves to a shared place only once a second tool actually needs it. Don't
   create separate libraries unless code has to be distributed on its own.
+- **Browser code** (`web/<tool>/`): for a tool that runs in the visitor's browser. Plain TypeScript classes,
+  one per file, with the test next to it (`X.test.ts`). No framework, no page markup and no calls to a
+  particular website: the browser features it needs (e.g. the WebRTC connection) are passed in, so tests run in
+  plain Node with small pretend versions. No `any`, and no `as` casts to silence an error. Websites copy these
+  files into their own build, so keep them free of imports from outside `web/`. The same "read like a book"
+  style applies, with TSDoc `/** ... */` comments. If the code sends the visitor's address anywhere (such as a
+  STUN server), the README says where, and the destination can be changed.
 - **The demo page** (`wwwroot/index.html`) stays a single file with no build step and no outside scripts or
   fonts. It shows that the API works; the real page with the guide and design lives on the CompareVPN site.
 

@@ -1,0 +1,16 @@
+{
+  "name": "comparevpn-tools-web",
+  "private": true,
+  "description": "Browser code for the CompareVPN tools that run in the visitor's browser, with its tests.",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vitest": "5.1.1"
+  }
+}
