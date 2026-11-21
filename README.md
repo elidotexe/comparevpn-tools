@@ -131,11 +131,16 @@ docker run -p 8080:8080 -e Tools__IspChecker__AllowedOrigins=https://example.com
 
 The image is ready to run on its own:
 
-- It contains a copy of the dataset from when it was built, so lookups work as soon as it starts.
-- A small loop in the container downloads a fresh copy right after start and then every
-  `DATASET_REFRESH_INTERVAL` (default `24h`; a number with `s`, `m`, `h` or `d`). Set it to `0` if you mount
-  the dataset and refresh it yourself. A failed download is logged and retried next time; the app keeps
-  serving the data it has.
+- It contains a copy of the datasets (network list and location file) from when it was built, so lookups work
+  as soon as it starts. If DB-IP can't be reached during the build, the image is still built and lookups have
+  no `location` until the first refresh succeeds.
+- A small loop in the container downloads a fresh network list right after start and then every
+  `DATASET_REFRESH_INTERVAL` (default `24h`; a number with `s`, `m`, `h` or `d`). The location file is only
+  downloaded again when a new month's is published. Set the interval to `0` if you mount the datasets and
+  refresh them yourself. A failed download is logged and retried next time; the app keeps serving the data it
+  has.
+- `-e Tools__IspChecker__LocationDataFilePath=` (empty) turns location off, and the loop then skips that
+  download too.
 - It listens on port `8080` as the unprivileged `app` user, and its Docker `HEALTHCHECK` asks `/healthz`.
 - `GET /version.txt` shows the version passed at build time (`--build-arg APP_VERSION=v1.2.3`), or `dev`.
   Deploy scripts can wait for it to know the new version is the one answering.
@@ -144,14 +149,21 @@ All settings below work as environment variables (`-e Tools__IspChecker__...`).
 
 ### Dataset
 
-Without Docker, the dataset is not part of the publish output. Keep it outside the app directory and
-point `DataFilePath` at it:
+Without Docker, the datasets are not part of the publish output. Keep them outside the app directory and
+point `DataFilePath` and `LocationDataFilePath` at them:
 
 ```bash
-# Once, and then daily (e.g. cron). The file is replaced atomically.
+# Once, and then daily (e.g. cron). Files are replaced atomically; the location file (about 60 MB to
+# download) is only fetched again when a new month's is out. SKIP_LOCATION_DATA=1 downloads only the
+# network list.
 scripts/download-data.sh /var/lib/comparevpn-tools
 Tools__IspChecker__DataFilePath=/var/lib/comparevpn-tools/ip2asn-combined.tsv.gz
+Tools__IspChecker__LocationDataFilePath=/var/lib/comparevpn-tools/dbip-city-lite.mmdb
 ```
+
+The script stops with an error if the network list can't be downloaded, but a failed location download is
+only a warning: the current location file (if any) stays in use. It writes `dbip-city-lite.month` next to the
+location file to remember which month it has.
 
 **No restart is needed after a refresh.** The app checks the file's modification time every
 `ReloadCheckInterval`, loads a changed file in the background and swaps it in once it has fully
@@ -232,7 +244,7 @@ CompareVPN.ISPLookup/               Web application (the only project in the sol
 CompareVPN.Tools.IspChecker.Tests/  Standalone test project
 .github/workflows/                 CI, release artifact, and the optional Azure deploy
 scripts/                           Dataset download helper and the container's start script
-Dockerfile                         Container image (app + dataset + daily refresh)
+Dockerfile                         Container image (app + datasets + daily refresh)
 data/                              Local datasets (network list and location file; never committed)
 ```
 

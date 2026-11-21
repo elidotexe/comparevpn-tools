@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
-# Starts the ISP lookup app inside its container and keeps its list of networks fresh.
+# Starts the ISP lookup app inside its container and keeps its datasets (the list of networks and the location file)
+# fresh.
 #
 # In plain terms, here is what happens:
 #   1. It checks the DATASET_REFRESH_INTERVAL setting (default "24h"; "0" turns refreshing off, for servers that
 #      mount the dataset and refresh it themselves). A bad value stops the container with a message.
-#   2. Unless refreshing is off, a small background loop downloads a fresh copy of the dataset now and then once
-#      per interval. A failed download is logged and tried again next time; the app keeps using the data it has.
+#   2. Unless refreshing is off, a small background loop downloads fresh copies now and then once per interval (the
+#      location file only when a new month's is out). Both files go into the folder of DataFilePath. An empty
+#      Tools__IspChecker__LocationDataFilePath turns location off, so the location file isn't downloaded either.
+#      A failed download is logged and tried again next time; the app keeps using the data it has.
 #   3. It starts the app. The image already holds a copy of the dataset from when it was built, so lookups work
 #      straight away, and the app swaps in each new download without a restart.
 set -euo pipefail
@@ -20,7 +23,12 @@ if [[ ! "$interval" =~ ^[0-9]+[smhd]?$ ]]; then
     exit 1
 fi
 
-# Step 2: Refresh the dataset in the background, forever.
+# An empty location setting (set, but blank) means location is turned off: skip that download.
+if [[ -n "${Tools__IspChecker__LocationDataFilePath+set}" && -z "${Tools__IspChecker__LocationDataFilePath}" ]]; then
+    export SKIP_LOCATION_DATA=1
+fi
+
+# Step 2: Refresh the datasets in the background, forever.
 refresh_dataset_forever() {
     while true; do
         bash "$script_dir/download-data.sh" "$(dirname "$data_file")" \
