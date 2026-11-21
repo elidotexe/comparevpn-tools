@@ -268,6 +268,7 @@ A page using it:
 3. Looks up each address from `LeakVerdict.addressesToLookUp(seenAddress, probe)` (e.g. `GET /api/tools/isp/{ip}`).
 4. Calls `LeakVerdict.decide(seen, probe, lookups)`: `leak`, `no-leak` or `webrtc-blocked`, with the leaked
    addresses, local addresses the browser shows openly, and whether the visitor's address looks like a VPN.
+   `LeakVerdict.revealedAddresses(probe)` lists every public address WebRTC revealed, for showing them all.
 
 **Privacy:** to learn its public address, the browser asks an address server (a "STUN server"), which sees the
 visitor's address, as with every WebRTC leak test. The probe uses Cloudflare's free public server

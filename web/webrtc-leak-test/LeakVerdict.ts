@@ -40,6 +40,11 @@ export class LeakVerdict {
         public readonly foundPublicAddress: boolean,
     ) {}
 
+    /** Every public address WebRTC revealed, each once, in the order the browser reported them. */
+    public static revealedAddresses(probe: ProbeResult): string[] {
+        return publicAddresses(probe);
+    }
+
     /** Step 1: The public addresses WebRTC revealed, each once, apart from "seenAddress" (the one websites see). */
     public static addressesToLookUp(seenAddress: string, probe: ProbeResult): string[] {
         return publicAddresses(probe).filter((address) => address !== seenAddress.toLowerCase());

@@ -24,6 +24,12 @@ describe('which addresses need looking up', () => {
         expect(LeakVerdict.addressesToLookUp(vpn.address, probe)).toEqual([home.address]);
     });
 
+    it('lists every public address WebRTC revealed, to show on the page', () => {
+        const probe = finished(publicLine(vpn.address), publicLine(home.address), hostLine('192.168.1.20'), publicLine(vpn.address));
+        expect(LeakVerdict.revealedAddresses(probe)).toEqual([vpn.address, home.address]);
+        expect(LeakVerdict.revealedAddresses({ outcome: 'unavailable' })).toEqual([]);
+    });
+
     it('has nothing to look up when WebRTC is unavailable', () => {
         expect(LeakVerdict.addressesToLookUp(vpn.address, { outcome: 'unavailable' })).toEqual([]);
     });
