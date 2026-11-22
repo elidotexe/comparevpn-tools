@@ -296,6 +296,7 @@ library against Cloudflare's speed test servers.
 | `Bufferbloat.ts` | Grades the extra delay while the connection is busy, A+ (under 5 ms) to F (400 ms or more). |
 | `ActivityCheck.ts` | Says whether the connection suits browsing, HD and 4K streaming, video calls and online gaming. |
 | `RunHistory.ts` | Past runs newest first, narrowed to one network if wanted, with the median, best, worst and how steady each figure is, and a CSV export. A saved run keeps the network's number and name, never the address. |
+| `VpnComparison.ts` | For a test without a VPN and one with it: checks the first wasn't already on a VPN and that the second really moved to a hosting or VPN network (from two lookups of the visitor's own address), and works out the share of speed the VPN kept and the delay it added. |
 
 A page using it:
 
