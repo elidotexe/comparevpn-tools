@@ -6,7 +6,7 @@ An open-source tool for the [CompareVPN](https://comparevpn.co) website, which y
 
 The solution contains one ASP.NET Core application, `CompareVPN.ISPLookup`.
 The repository and solution keep the broader CompareVPN Tools name for future tools.
-Tools that run entirely in the visitor's browser, such as the WebRTC leak test, keep their code in `web/`
+Tools that run entirely in the visitor's browser, such as the WebRTC leak test and the speed test, keep their code in `web/`
 (see [Browser code](#browser-code-web)).
 
 ## Privacy
@@ -18,6 +18,8 @@ Tools that run entirely in the visitor's browser, such as the WebRTC leak test, 
 - The WebRTC leak test runs in the browser. Like every WebRTC test, the browser asks an address server
   (Cloudflare's public STUN server by default) for its public address, so that server sees it. See
   [Browser code](#browser-code-web).
+- The speed test runs in the browser against Cloudflare's speed test servers, which see the visitor's address
+  as any speed test server does. Its results are not reported to Cloudflare.
 
 ## Run locally
 
@@ -282,6 +284,28 @@ npm run typecheck
 npm test
 ```
 
+### Speed test (`web/speed-test/`)
+
+Measures download and upload speed, latency, jitter and "bufferbloat" (how much slower the connection answers
+while it is busy), using Cloudflare's open-source [`@cloudflare/speedtest`](https://github.com/cloudflare/speedtest)
+library against Cloudflare's speed test servers.
+
+| File | What it does |
+|---|---|
+| `SpeedTestEngine.ts` | Runs one test (`full`, or `quick` with smaller downloads for mobile data), reports progress, and answers with the figures in Mbps and ms, `failed` when no download speed was measured, or `stopped`. The only file that knows about the library. |
+| `Bufferbloat.ts` | Grades the extra delay while the connection is busy, A+ (under 5 ms) to F (400 ms or more). |
+| `ActivityCheck.ts` | Says whether the connection suits browsing, HD and 4K streaming, video calls and online gaming. |
+
+A page using it:
+
+1. Runs `new SpeedTestEngine().run('full', progress => ...)` and shows the progress.
+2. With a `finished` answer, shows the figures, `Bufferbloat.from(measurement)` and `ActivityCheck.check(measurement)`.
+
+**Privacy:** the test talks to `https://speed.cloudflare.com`, which sees the visitor's address, as any speed test
+server does. The library's own reporting of results to Cloudflare is switched off, and nothing else is sent
+anywhere by this code. The full test can use a few hundred megabytes on a fast connection; it moves on to the
+next step once a download or upload takes about a second, so slower connections use much less.
+
 ## Repository layout
 
 ```
@@ -295,6 +319,7 @@ CompareVPN.ISPLookup/               Web application (the only project in the sol
 CompareVPN.Tools.IspChecker.Tests/  Standalone test project
 web/                               Browser code for tools that run in the visitor's browser, with its tests
   webrtc-leak-test/                The WebRTC leak test
+  speed-test/                      The internet speed test
 .github/workflows/                 CI, release artifact, and the optional Azure deploy
 scripts/                           Dataset download helper and the container's start script
 Dockerfile                         Container image (app + datasets + daily refresh)
